@@ -694,3 +694,56 @@ td .row-actions {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* ---------- Footer ---------- */
+.app-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 22px;
+  background: var(--bg-soft);
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.footer-copy {
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+.footer-version {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: Consolas, monospace;
+  font-size: 11.5px;
+}
+
+.update-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: rgba(63, 185, 80, 0.15);
+  border: 1px solid rgba(63, 185, 80, 0.4);
+  color: var(--green);
+  font-weight: 700;
+  font-size: 11px;
+  cursor: pointer;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(63, 185, 80, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(63, 185, 80, 0);
+  }
+}

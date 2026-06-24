@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { RouterRecord } from '../../shared/types'
 import { ToastProvider } from './components/ui'
 import { api } from './lib/api'
@@ -28,6 +28,33 @@ export interface Connection {
   identity: string
   version: string
   api: 'rest' | 'binary'
+}
+
+function Footer(): React.JSX.Element {
+  const [version, setVersion] = useState('')
+  const [newVersion, setNewVersion] = useState<string | null>(null)
+
+  useEffect(() => {
+    void api.appInfo.getVersion().then(setVersion)
+    const unsubscribe = api.appInfo.onUpdateAvailable((info) => {
+      setNewVersion(info.version)
+    })
+    return unsubscribe
+  }, [])
+
+  return (
+    <div className="app-footer">
+      <span className="footer-copy">© Marcos Solis</span>
+      <span className="footer-version">
+        v{version}
+        {newVersion && (
+          <span className="update-badge" title={`Nueva versión disponible: ${newVersion}`}>
+            🔄 {newVersion}
+          </span>
+        )}
+      </span>
+    </div>
+  )
 }
 
 function App(): React.JSX.Element {
@@ -81,6 +108,7 @@ function App(): React.JSX.Element {
           {screen === 'lotes' && <Lotes onBack={backToDashboard} />}
           {screen === 'plantillas' && <Plantillas onBack={backToDashboard} />}
         </div>
+        <Footer />
       </div>
     </ToastProvider>
   )

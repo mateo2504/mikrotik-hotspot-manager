@@ -494,4 +494,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle('settings:set', (_e, key: string, value: string) =>
     settingsRepo.setSetting(key, value)
   )
+
+  // ---- App Info ----
+  ipcMain.handle('app:version', () => app.getVersion())
 }

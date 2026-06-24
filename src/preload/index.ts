@@ -28,6 +28,14 @@ import type {
 } from '../shared/types'
 
 const api: Api = {
+  appInfo: {
+    getVersion: (): Promise<string> => ipcRenderer.invoke('app:version'),
+    onUpdateAvailable: (cb: (info: { version: string }) => void): (() => void) => {
+      const listener = (_e: Electron.IpcRendererEvent, info: { version: string }): void => cb(info)
+      ipcRenderer.on('app:update-available', listener)
+      return () => ipcRenderer.removeListener('app:update-available', listener)
+    }
+  },
   routers: {
     list: (): Promise<RouterRecord[]> => ipcRenderer.invoke('routers:list'),
     create: (input: RouterInput): Promise<RouterRecord> =>

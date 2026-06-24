@@ -27,6 +27,10 @@ import type {
 
 // Contrato del puente preload (window.api) — compartido entre main, preload y renderer
 export interface Api {
+  appInfo: {
+    getVersion(): Promise<string>
+    onUpdateAvailable(cb: (info: { version: string }) => void): () => void
+  }
   routers: {
     list(): Promise<RouterRecord[]>
     create(input: RouterInput): Promise<RouterRecord>

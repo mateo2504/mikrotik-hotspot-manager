@@ -1,5 +1,13 @@
 import { autoUpdater } from 'electron-updater'
-import { dialog } from 'electron'
+import { dialog, BrowserWindow } from 'electron'
+
+function notifyUpdateAvailable(version: string): void {
+  BrowserWindow.getAllWindows().forEach((win) => {
+    if (!win.isDestroyed()) {
+      win.webContents.send('app:update-available', { version })
+    }
+  })
+}
 
 export function initAutoUpdater(): void {
   // Verificar actualizaciones al iniciar
@@ -10,6 +18,7 @@ export function initAutoUpdater(): void {
   // Cuando se detecta una nueva versión disponible
   autoUpdater.on('update-available', (info) => {
     console.info('Update available:', info)
+    notifyUpdateAvailable(info.version)
     dialog.showMessageBox({
       type: 'info',
       title: 'Actualización disponible',
