@@ -81,8 +81,10 @@ export default function Dashboard({
             <div className="mc-icon" style={{ background: m.color }}>
               {m.icon}
             </div>
-            <h3>{m.title}</h3>
-            <p>{m.desc}</p>
+            <div className="mc-body">
+              <h3>{m.title}</h3>
+              <p>{m.desc}</p>
+            </div>
           </div>
         ))}
       </div>

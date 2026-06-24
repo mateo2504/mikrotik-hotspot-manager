@@ -279,8 +279,8 @@ textarea {
 /* ---------- Dashboard de cards ---------- */
 .menu-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
   max-width: 1000px;
   margin: 10px auto;
 }
@@ -288,38 +288,46 @@ textarea {
 .menu-card {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 26px 22px;
+  border-radius: 6px;
+  padding: 14px 16px;
   cursor: pointer;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  gap: 14px;
   transition: all 0.15s ease;
 }
 
 .menu-card:hover {
-  transform: translateY(-3px);
   border-color: var(--accent);
   box-shadow: var(--shadow);
 }
 
 .menu-card .mc-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
-  font-size: 26px;
+  font-size: 22px;
+  flex-shrink: 0;
 }
 
-.menu-card h3 {
-  font-size: 16px;
+.menu-card .mc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
-.menu-card p {
+.menu-card .mc-body h3 {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.menu-card .mc-body p {
   color: var(--text-dim);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 12.5px;
+  line-height: 1.4;
 }
 
 /* ---------- Tablas ---------- */
