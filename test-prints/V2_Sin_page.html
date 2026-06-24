@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+* { margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; width: 58mm; }
+.voucher { width: 58mm; box-sizing: border-box; break-after: page; padding: 2mm 0; }
+.vinner { position: relative; overflow: hidden; box-sizing: border-box; }
+.content {
+  position: relative;
+  z-index: 2;
+  box-sizing: border-box;
+  padding: 2mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.8mm;
+}
+.qr-inline {
+  margin-top: auto;
+  align-self: center;
+  width: 100%;
+  text-align: center;
+  box-sizing: border-box;
+  padding-top: 1.5mm;
+}
+.fld { line-height: 1.25; word-break: break-all; font-size: 9pt; text-align: center; }
+.code { font-weight: 700; letter-spacing: 0.5px; }
+</style>
+</head>
+<body>
+<div style="padding: 4mm; text-align: center; font-size: 8pt; font-weight: bold; border-bottom: 1px dashed #999;">TEST: V2 - Sin @page</div>
+<div class="voucher">
+  <div class="vinner">
+    <div class="content">
+      <div class="fld" style="font-size:9pt;font-weight:700;text-align:center;">WiFi Internet</div>
+      <div class="fld" style="font-size:7pt;text-align:center;">1 Día</div>
+      <div class="fld" style="font-size:9pt;text-align:center;">Usuario: <span class="code">ABC123</span></div>
+      <div class="fld" style="font-size:9pt;text-align:center;">Clave: <span class="code">XYZ789</span></div>
+      <div class="fld" style="font-size:7pt;text-align:center;">$10</div>
+      <div class="fld" style="font-size:7pt;text-align:center;">Vigencia: 3d</div>
+      <div class="fld" style="font-size:7pt;text-align:center;">Gracias por su compra</div>
+      <div class="qr-inline">
+        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" style="width:45%;max-width:100%;height:auto;display:block;margin:0 auto;" alt="QR" />
+      </div>
+    </div>
+  </div>
+</div>
+<div style="padding: 4mm; text-align: center;">
+  <button onclick="window.print()" style="padding: 8px 16px; font-size: 12pt; cursor: pointer;">🖨️ Imprimir</button>
+</div>
+</body>
+</html>
