@@ -3,7 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { getDb, closeDb } from './db/database'
-import { registerIpcHandlers, seedDefaultTemplates } from './ipc/handlers'
+import { registerIpcHandlers } from './ipc/handlers'
 import { initAutoUpdater } from './autoUpdater'
 
 // Depuración remota solo en desarrollo
@@ -56,7 +56,6 @@ app.whenReady().then(() => {
   })
 
   getDb()
-  seedDefaultTemplates()
   registerIpcHandlers(() => mainWindow)
 
   createWindow()

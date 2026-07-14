@@ -26,6 +26,7 @@ export function makeBatchTag(): string {
 
 export function generateCodes(options: CodeOptions): { username: string; password: string }[] {
   const charset = CHARSETS[options.charset]
+  const passwordCharset = CHARSETS[options.passwordCharset ?? options.charset]
   const used = new Set<string>()
   const out: { username: string; password: string }[] = []
   while (out.length < options.qty) {
@@ -33,7 +34,11 @@ export function generateCodes(options: CodeOptions): { username: string; passwor
     if (used.has(username)) continue
     used.add(username)
     const password =
-      options.userMode === 'same' ? username : options.userMode === 'userOnly' ? '' : randomCode(options.passwordLength, charset)
+      options.userMode === 'same'
+        ? username
+        : options.userMode === 'userOnly'
+          ? ''
+          : randomCode(options.passwordLength, passwordCharset)
     out.push({ username, password })
   }
   return out
@@ -46,7 +51,7 @@ export async function generateBatch(
   options: CodeOptions,
   onProgress: (done: number, total: number) => void
 ): Promise<GenerateBatchResult> {
-  const meta = getPlanMeta(profileName)
+  const meta = getPlanMeta(routerId, profileName)
   const tag = makeBatchTag()
   // El comentario al crear la ficha es solo el tag de lote. La fecha y hora de
   // inicio la añade el script on-login del plan en el PRIMER login de la ficha,
