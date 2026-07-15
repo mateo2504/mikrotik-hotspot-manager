@@ -68,10 +68,10 @@ export function buildOnLoginScript(validity: string, macAleatoria = false): stri
 
 // ---- Planes (user profiles) ----
 
-export async function listProfiles(client: RouterClient): Promise<HotspotProfile[]> {
+export async function listProfiles(client: RouterClient, routerId: number): Promise<HotspotProfile[]> {
   const [rows, metas] = await Promise.all([
     client.print(PROFILE_PATH),
-    Promise.resolve(listPlanMeta())
+    Promise.resolve(listPlanMeta(routerId))
   ])
   return rows.map((r) => ({
     rosId: r['.id'] ?? '',
@@ -118,14 +118,14 @@ export async function listUsers(client: RouterClient): Promise<HotspotUser[]> {
 }
 
 /** Props para crear un usuario aplicando limit-uptime si el plan es pausado */
-export function userProps(input: UserInput): Record<string, string> {
+export function userProps(routerId: number, input: UserInput): Record<string, string> {
   const props: Record<string, string> = {
     name: input.name,
     password: input.password,
     profile: input.profile
   }
   if (input.comment) props.comment = input.comment
-  const meta = getPlanMeta(input.profile)
+  const meta = getPlanMeta(routerId, input.profile)
   if (meta && meta.planType === 'pausado' && meta.uptimeLimit) {
     props['limit-uptime'] = meta.uptimeLimit
   }

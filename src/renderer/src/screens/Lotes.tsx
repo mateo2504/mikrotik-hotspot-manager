@@ -159,7 +159,8 @@ function GenerateForm({
     length: 6,
     charset: 'alnum',
     userMode: 'same',
-    passwordLength: 4
+    passwordLength: 6,
+    passwordCharset: 'alnum'
   })
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -235,7 +236,7 @@ function GenerateForm({
             onChange={(e) => setOptions({ ...options, qty: Number(e.target.value) })}
           />
         </div>
-        <div className="field full">
+        <div className="field">
           <label>Tipo de ficha</label>
           <select
             value={options.userMode}
@@ -270,7 +271,7 @@ function GenerateForm({
           />
         </div>
         <div className="field">
-          <label>Caracteres</label>
+          <label>{'Caracteres del c\u00f3digo'}</label>
           <select
             value={options.charset}
             onChange={(e) =>
@@ -284,16 +285,35 @@ function GenerateForm({
           </select>
         </div>
         {options.userMode === 'separate' && (
-          <div className="field">
-            <label>Largo de la clave</label>
-            <input
-              type="number"
-              min={3}
-              max={12}
-              value={options.passwordLength}
-              onChange={(e) => setOptions({ ...options, passwordLength: Number(e.target.value) })}
-            />
-          </div>
+          <>
+            <div className="field">
+              <label>{'Largo de la contrase\u00f1a'}</label>
+              <input
+                type="number"
+                min={3}
+                max={12}
+                value={options.passwordLength}
+                onChange={(e) => setOptions({ ...options, passwordLength: Number(e.target.value) })}
+              />
+            </div>
+            <div className="field">
+              <label>{'Caracteres de la contrase\u00f1a'}</label>
+              <select
+                value={options.passwordCharset}
+                onChange={(e) =>
+                  setOptions({
+                    ...options,
+                    passwordCharset: e.target.value as CodeOptions['passwordCharset']
+                  })
+                }
+              >
+                <option value="num">{'Solo n\u00fameros'}</option>
+                <option value="lower">{'Letras min\u00fasculas'}</option>
+                <option value="upper">{'Letras MAY\u00daSCULAS'}</option>
+                <option value="alnum">{'Letras y n\u00fameros'}</option>
+              </select>
+            </div>
+          </>
         )}
         {progress && (
           <div className="field full">
@@ -426,7 +446,7 @@ function PrintModal({ batch, onClose }: { batch: Batch; onClose: () => void }): 
       const [t, p, savedTpl, savedPrinter] = await Promise.all([
         api.templates.list(),
         api.print.listPrinters(),
-        api.settings.get('lastTemplateId'),
+        api.settings.get(`lastTemplateId:${batch.routerId}`),
         api.settings.get('lastPrinter')
       ])
       setTemplates(t)
@@ -461,7 +481,7 @@ function PrintModal({ batch, onClose }: { batch: Batch; onClose: () => void }): 
   }, [batch.id, templateId, onlyActive])
 
   const saveChoices = (): void => {
-    if (templateId !== null) void api.settings.set('lastTemplateId', String(templateId))
+    if (templateId !== null) void api.settings.set(`lastTemplateId:${batch.routerId}`, String(templateId))
     if (printerName) void api.settings.set('lastPrinter', printerName)
   }
 

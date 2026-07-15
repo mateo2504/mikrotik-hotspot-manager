@@ -54,6 +54,11 @@ function client(): ConnectedRouter['client'] {
   return session.client
 }
 
+function sessionRouterId(): number {
+  if (!session) throw new Error('No hay conexion activa con el router')
+  return session.routerId
+}
+
 function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
@@ -79,7 +84,7 @@ async function buildPrintData(
 ): Promise<{ data: VoucherPrintData[]; total: number; verified: boolean }> {
   const batch = batchesRepo.getBatch(batchId)
   if (!batch) throw new Error('Lote no encontrado')
-  const meta = planMetaRepo.getPlanMeta(batch.profileName)
+  const meta = planMetaRepo.getPlanMeta(batch.routerId, batch.profileName)
   const userEqualsPass = batch.codeOptions.userMode === 'same'
   const userOnly = batch.codeOptions.userMode === 'userOnly'
   let vouchers = batchesRepo.getVouchers(batchId)
@@ -123,8 +128,10 @@ async function renderBatchHtml(
   onlyActive: boolean,
   forPreview = false
 ): Promise<{ html: string; printed: number; total: number; verified: boolean }> {
-  const template = templatesRepo.getTemplate(templateId)
-  if (!template) throw new Error('Plantilla no encontrada')
+  const batch = batchesRepo.getBatch(batchId)
+  if (!batch) throw new Error('Lote no encontrado')
+  const template = templatesRepo.getTemplate(templateId, batch.routerId)
+  if (!template) throw new Error('Plantilla no encontrada para este router')
   const { data, total, verified } = await buildPrintData(batchId, onlyActive)
   const printed = data.length
   let slice = data
@@ -144,10 +151,10 @@ async function renderBatchHtml(
   }
 }
 
-export function seedDefaultTemplates(): void {
-  if (templatesRepo.countTemplates() > 0) return
+export function seedDefaultTemplates(routerId: number): void {
+  if (templatesRepo.countTemplates(routerId) > 0) return
   for (const t of defaultTemplates()) {
-    templatesRepo.createTemplate({
+    templatesRepo.createTemplate(routerId, {
       name: t.name,
       kind: t.config.kind,
       config: t.config,
@@ -186,6 +193,16 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
         record.detectedApi
       )
       session = { ...connected, routerId: id }
+      connected.client.onDisconnect?.((error) => {
+        // No tocar una sesión nueva si el aviso pertenece a una conexión anterior.
+        if (!session || session.client !== connected.client) return
+        session = null
+        const win = getMainWindow()
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('router:connection-lost', { error: errMsg(error) })
+        }
+      })
+      seedDefaultTemplates(id)
       if (record.apiType === 'auto') routersRepo.setDetectedApi(id, connected.api)
       return { ok: true, identity: connected.identity, version: connected.version, api: connected.api }
     } catch (err) {
@@ -202,11 +219,11 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   })
 
   // ---- Planes ----
-  ipcMain.handle('profiles:list', () => listProfiles(client()))
+  ipcMain.handle('profiles:list', () => listProfiles(client(), sessionRouterId()))
   ipcMain.handle('profiles:create', async (_e, input: ProfileInput) => {
     try {
       await client().add(PROFILE_PATH, profileProps(input))
-      planMetaRepo.upsertPlanMeta({
+      planMetaRepo.upsertPlanMeta(sessionRouterId(), {
         profileName: input.name,
         price: input.price,
         planType: input.planType,
@@ -228,8 +245,8 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
         // rate-limit vacío debe limpiarse en el router (shared-users lo fija profileProps)
         if (!input.rateLimit) props['rate-limit'] = ''
         await client().set(PROFILE_PATH, rosId, props)
-        if (oldName !== input.name) planMetaRepo.renamePlanMeta(oldName, input.name)
-        planMetaRepo.upsertPlanMeta({
+        if (oldName !== input.name) planMetaRepo.renamePlanMeta(sessionRouterId(), oldName, input.name)
+        planMetaRepo.upsertPlanMeta(sessionRouterId(), {
           profileName: input.name,
           price: input.price,
           planType: input.planType,
@@ -247,7 +264,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle('profiles:delete', async (_e, rosId: string, name: string) => {
     try {
       await client().remove(PROFILE_PATH, [rosId])
-      planMetaRepo.deletePlanMeta(name)
+      planMetaRepo.deletePlanMeta(sessionRouterId(), name)
       return { ok: true }
     } catch (err) {
       return { ok: false, error: errMsg(err) }
@@ -258,7 +275,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle('users:list', () => listUsers(client()))
   ipcMain.handle('users:create', async (_e, input: UserInput) => {
     try {
-      await client().add(USER_PATH, userProps(input))
+      await client().add(USER_PATH, userProps(sessionRouterId(), input))
       return { ok: true }
     } catch (err) {
       return { ok: false, error: errMsg(err) }
@@ -266,7 +283,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   })
   ipcMain.handle('users:update', async (_e, rosId: string, input: UserInput) => {
     try {
-      await client().set(USER_PATH, rosId, userProps(input))
+      await client().set(USER_PATH, rosId, userProps(sessionRouterId(), input))
       return { ok: true }
     } catch (err) {
       return { ok: false, error: errMsg(err) }
@@ -408,14 +425,16 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   })
 
   // ---- Plantillas ----
-  ipcMain.handle('templates:list', () => templatesRepo.listTemplates())
+  ipcMain.handle('templates:list', () => templatesRepo.listTemplates(sessionRouterId()))
   ipcMain.handle('templates:create', (_e, input: TemplateInput) =>
-    templatesRepo.createTemplate(input)
+    templatesRepo.createTemplate(sessionRouterId(), input)
   )
   ipcMain.handle('templates:update', (_e, id: number, input: TemplateInput) =>
-    templatesRepo.updateTemplate(id, input)
+    templatesRepo.updateTemplate(sessionRouterId(), id, input)
   )
-  ipcMain.handle('templates:delete', (_e, id: number) => templatesRepo.deleteTemplate(id))
+  ipcMain.handle('templates:delete', (_e, id: number) =>
+    templatesRepo.deleteTemplate(sessionRouterId(), id)
+  )
   ipcMain.handle('templates:pickImage', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
       title: 'Elegir imagen de fondo',

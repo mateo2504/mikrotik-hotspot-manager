@@ -11,6 +11,8 @@ export interface RouterClient {
   readonly kind: 'rest' | 'binary'
   connect(): Promise<void>
   close(): Promise<void>
+  /** Se ejecuta si una conexión persistente se pierde inesperadamente. */
+  onDisconnect?(listener: (error: Error) => void): () => void
   /** path estilo 'ip/hotspot/user'. query: coincidencia exacta campo=valor */
   print(path: string, query?: Record<string, string>): Promise<RosObject[]>
   add(path: string, props: Record<string, string>): Promise<void>
