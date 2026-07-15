@@ -199,6 +199,15 @@ export interface GenerateBatchResult {
   error?: string
 }
 
+export interface ResumeBatchResult {
+  ok: boolean
+  alreadyPresent?: number
+  created?: number
+  failed?: number
+  total?: number
+  error?: string
+}
+
 export interface GenerateProgress {
   done: number
   total: number

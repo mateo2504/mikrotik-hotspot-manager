@@ -39,7 +39,7 @@ import {
   updateIpBinding,
   userProps
 } from '../routeros/hotspot'
-import { generateBatch } from '../services/batchGenerator'
+import { generateBatch, resumeBatch } from '../services/batchGenerator'
 import { exportPdf, listPrinters, printHtml } from '../services/printer'
 import { defaultTemplates, renderVoucherHTML } from '../../shared/voucherRender'
 
@@ -404,6 +404,20 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
       }
     }
   )
+  ipcMain.handle('batches:resume', async (e, batchId: number) => {
+    try {
+      const batch = batchesRepo.getBatch(batchId)
+      if (!batch) throw new Error('Lote no encontrado')
+      if (!session || session.routerId !== batch.routerId) {
+        throw new Error('Conéctate al router de este lote para reanudarlo')
+      }
+      return await resumeBatch(session.client, batchId, (done, total) => {
+        if (!e.sender.isDestroyed()) e.sender.send('batches:generate-progress', { done, total })
+      })
+    } catch (err) {
+      return { ok: false, error: errMsg(err) }
+    }
+  })
   ipcMain.handle('batches:delete', async (_e, batchId: number) => {
     try {
       const batch = batchesRepo.getBatch(batchId)

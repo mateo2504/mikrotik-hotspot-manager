@@ -16,6 +16,7 @@ import type {
   PrintResult,
   PrinterInfo,
   ProfileInput,
+  ResumeBatchResult,
   RouterInput,
   RouterRecord,
   SimpleResult,
@@ -73,6 +74,7 @@ export interface Api {
     getVouchers(batchId: number): Promise<Voucher[]>
     checkOnRouter(batchId: number): Promise<{ ok: boolean; present?: string[]; error?: string }>
     generate(input: { profileName: string; codeOptions: CodeOptions }): Promise<GenerateBatchResult>
+    resume(batchId: number): Promise<ResumeBatchResult>
     remove(batchId: number): Promise<DeleteBatchResult>
     onGenerateProgress(cb: (p: GenerateProgress) => void): () => void
   }

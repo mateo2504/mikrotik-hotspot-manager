@@ -18,6 +18,7 @@ import type {
   PrintResult,
   PrinterInfo,
   ProfileInput,
+  ResumeBatchResult,
   RouterInput,
   RouterRecord,
   SimpleResult,
@@ -100,6 +101,8 @@ const api: Api = {
       ipcRenderer.invoke('batches:checkOnRouter', batchId),
     generate: (input: { profileName: string; codeOptions: CodeOptions }): Promise<GenerateBatchResult> =>
       ipcRenderer.invoke('batches:generate', input),
+    resume: (batchId: number): Promise<ResumeBatchResult> =>
+      ipcRenderer.invoke('batches:resume', batchId),
     remove: (batchId: number): Promise<DeleteBatchResult> =>
       ipcRenderer.invoke('batches:delete', batchId),
     onGenerateProgress: (cb: (p: GenerateProgress) => void): (() => void) => {

@@ -2,8 +2,9 @@ import { randomInt } from 'crypto'
 import type { RouterClient } from '../routeros/client'
 import type { CodeOptions, GenerateBatchResult } from '../../shared/types'
 import { getPlanMeta } from '../db/repos/planMeta'
-import { createBatch, insertVouchers, markVoucherCreated } from '../db/repos/batches'
-import { addUser } from '../routeros/hotspot'
+import { createBatch, getBatch, getVouchers, insertVouchers, markVoucherCreated } from '../db/repos/batches'
+import { addUser, findUsersByComment } from '../routeros/hotspot'
+import type { ResumeBatchResult } from '../../shared/types'
 
 const CHARSETS: Record<CodeOptions['charset'], string> = {
   num: '0123456789',
@@ -87,4 +88,54 @@ export async function generateBatch(
     if ((i + 1) % 10 === 0 || i + 1 === codes.length) onProgress(i + 1, codes.length)
   }
   return { ok: true, batchId, created, failed }
+}
+
+/**
+ * Reintenta solamente las fichas que no están actualmente en el router.
+ * La consulta en vivo es la fuente de verdad, incluso si el corte ocurrió
+ * después de que RouterOS creó un usuario pero antes de guardar el avance local.
+ */
+export async function resumeBatch(
+  client: RouterClient,
+  batchId: number,
+  onProgress: (done: number, total: number) => void
+): Promise<ResumeBatchResult> {
+  const batch = getBatch(batchId)
+  if (!batch) throw new Error('Lote no encontrado')
+
+  const vouchers = getVouchers(batchId)
+  const existing = new Set(
+    (await findUsersByComment(client, batch.commentTag)).map((user) => user.name ?? '').filter(Boolean)
+  )
+  const pending = vouchers.filter((voucher) => !existing.has(voucher.username))
+
+  // Mantiene el registro local alineado con lo que realmente existe en el router.
+  for (const voucher of vouchers) {
+    if (existing.has(voucher.username)) markVoucherCreated(batchId, voucher.username)
+  }
+
+  const meta = getPlanMeta(batch.routerId, batch.profileName)
+  let created = 0
+  let failed = 0
+  for (let i = 0; i < pending.length; i++) {
+    const voucher = pending[i]
+    const props: Record<string, string> = {
+      name: voucher.username,
+      profile: batch.profileName,
+      comment: batch.commentTag
+    }
+    if (batch.codeOptions.userMode !== 'userOnly') props.password = voucher.password
+    if (meta?.planType === 'pausado' && meta.uptimeLimit) props['limit-uptime'] = meta.uptimeLimit
+
+    try {
+      await addUser(client, props)
+      markVoucherCreated(batchId, voucher.username)
+      created++
+    } catch {
+      failed++
+    }
+    if ((i + 1) % 10 === 0 || i + 1 === pending.length) onProgress(i + 1, pending.length)
+  }
+
+  return { ok: true, alreadyPresent: existing.size, created, failed, total: pending.length }
 }
