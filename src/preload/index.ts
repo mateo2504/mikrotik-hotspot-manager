@@ -18,6 +18,7 @@ import type {
   PrintResult,
   PrinterInfo,
   ProfileInput,
+  ResumeBatchResult,
   RouterInput,
   RouterRecord,
   SimpleResult,
@@ -44,7 +45,12 @@ const api: Api = {
       ipcRenderer.invoke('routers:update', id, input),
     remove: (id: number): Promise<void> => ipcRenderer.invoke('routers:delete', id),
     connect: (id: number): Promise<ConnectResult> => ipcRenderer.invoke('router:connect', id),
-    disconnect: (): Promise<SimpleResult> => ipcRenderer.invoke('router:disconnect')
+    disconnect: (): Promise<SimpleResult> => ipcRenderer.invoke('router:disconnect'),
+    onConnectionLost: (cb: (info: { error: string }) => void): (() => void) => {
+      const listener = (_e: Electron.IpcRendererEvent, info: { error: string }): void => cb(info)
+      ipcRenderer.on('router:connection-lost', listener)
+      return () => ipcRenderer.removeListener('router:connection-lost', listener)
+    }
   },
   profiles: {
     list: (): Promise<HotspotProfile[]> => ipcRenderer.invoke('profiles:list'),
@@ -95,6 +101,8 @@ const api: Api = {
       ipcRenderer.invoke('batches:checkOnRouter', batchId),
     generate: (input: { profileName: string; codeOptions: CodeOptions }): Promise<GenerateBatchResult> =>
       ipcRenderer.invoke('batches:generate', input),
+    resume: (batchId: number): Promise<ResumeBatchResult> =>
+      ipcRenderer.invoke('batches:resume', batchId),
     remove: (batchId: number): Promise<DeleteBatchResult> =>
       ipcRenderer.invoke('batches:delete', batchId),
     onGenerateProgress: (cb: (p: GenerateProgress) => void): (() => void) => {

@@ -19,6 +19,7 @@ export default function Lotes({ onBack }: { onBack: () => void }): React.JSX.Ele
   const [generating, setGenerating] = useState(false)
   const [printing, setPrinting] = useState<Batch | null>(null)
   const [viewing, setViewing] = useState<Batch | null>(null)
+  const [resuming, setResuming] = useState<Batch | null>(null)
   const [deleting, setDeleting] = useState<Batch | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -89,6 +90,9 @@ export default function Lotes({ onBack }: { onBack: () => void }): React.JSX.Ele
                       <button className="btn sm" onClick={() => setViewing(b)}>
                         Ver fichas
                       </button>
+                      <button className="btn sm primary" onClick={() => setResuming(b)}>
+                        ↻ Reanudar
+                      </button>
                       <button className="btn sm primary" onClick={() => setPrinting(b)}>
                         🖨️ Imprimir
                       </button>
@@ -121,6 +125,17 @@ export default function Lotes({ onBack }: { onBack: () => void }): React.JSX.Ele
 
       {viewing && <VouchersModal batch={viewing} onClose={() => setViewing(null)} />}
 
+      {resuming && (
+        <ResumeBatchModal
+          batch={resuming}
+          onClose={() => setResuming(null)}
+          onDone={() => {
+            setResuming(null)
+            void reload()
+          }}
+        />
+      )}
+
       {deleting && (
         <ConfirmDialog
           title="Eliminar lote"
@@ -137,6 +152,100 @@ export default function Lotes({ onBack }: { onBack: () => void }): React.JSX.Ele
         />
       )}
     </div>
+  )
+}
+
+// ---------- Reanudar lote ----------
+
+function ResumeBatchModal({
+  batch,
+  onClose,
+  onDone
+}: {
+  batch: Batch
+  onClose: () => void
+  onDone: () => void
+}): React.JSX.Element {
+  const toast = useToast()
+  const [present, setPresent] = useState<string[] | null>(null)
+  const [checking, setChecking] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+  const unsubRef = useRef<(() => void) | null>(null)
+
+  const check = async (): Promise<void> => {
+    setChecking(true)
+    const result = await api.batches.checkOnRouter(batch.id)
+    setChecking(false)
+    if (result.ok) setPresent(result.present ?? [])
+    else toast.error(result.error ?? 'No se pudo verificar el lote')
+  }
+
+  useEffect(() => {
+    void check()
+    return () => unsubRef.current?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batch.id])
+
+  const resume = async (): Promise<void> => {
+    setBusy(true)
+    setProgress({ done: 0, total: Math.max(1, batch.voucherCount - (present?.length ?? 0)) })
+    unsubRef.current = api.batches.onGenerateProgress((value) => setProgress(value))
+    const result = await api.batches.resume(batch.id)
+    unsubRef.current?.()
+    setBusy(false)
+    if (!result.ok) {
+      setProgress(null)
+      toast.error(result.error ?? 'No se pudo reanudar el lote')
+      return
+    }
+    toast.success(
+      `Lote reanudado: ${result.created ?? 0} fichas creadas${result.failed ? `, ${result.failed} fallidas` : ''}`
+    )
+    onDone()
+  }
+
+  const missing = present === null ? null : Math.max(0, batch.voucherCount - present.length)
+  return (
+    <Modal
+      title={`Reanudar lote ${batch.commentTag.replace('lote:', '')}`}
+      onClose={busy ? () => {} : onClose}
+      footer={
+        <>
+          <button className="btn" onClick={() => void check()} disabled={checking || busy}>
+            {checking ? <span className="spinner" /> : '⟳'} Revalidar
+          </button>
+          <button className="btn" onClick={onClose} disabled={busy}>
+            Cancelar
+          </button>
+          <button className="btn primary" onClick={() => void resume()} disabled={checking || busy || missing === 0}>
+            {busy ? <span className="spinner" /> : '↻'} Reanudar {missing ?? ''} fichas
+          </button>
+        </>
+      }
+    >
+      <p style={{ color: 'var(--text-dim)', lineHeight: 1.55 }}>
+        Se verificará de nuevo el lote en el router y solo se crearán las fichas que falten. Las
+        fichas ya existentes no se duplicarán.
+      </p>
+      <div style={{ marginTop: 16, fontWeight: 600 }}>
+        {checking
+          ? 'Verificando fichas existentes en el router…'
+          : missing === 0
+            ? 'Todas las fichas de este lote ya existen en el router.'
+            : `${present?.length ?? 0} de ${batch.voucherCount} ya existen; se crearán ${missing} fichas.`}
+      </div>
+      {progress && (
+        <div className="field full" style={{ marginTop: 16 }}>
+          <label>
+            Creando fichas faltantes… {progress.done} / {progress.total}
+          </label>
+          <div className="progress-bar">
+            <div style={{ width: `${(progress.done / progress.total) * 100}%` }} />
+          </div>
+        </div>
+      )}
+    </Modal>
   )
 }
 
@@ -159,7 +268,8 @@ function GenerateForm({
     length: 6,
     charset: 'alnum',
     userMode: 'same',
-    passwordLength: 4
+    passwordLength: 6,
+    passwordCharset: 'alnum'
   })
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -235,7 +345,7 @@ function GenerateForm({
             onChange={(e) => setOptions({ ...options, qty: Number(e.target.value) })}
           />
         </div>
-        <div className="field full">
+        <div className="field">
           <label>Tipo de ficha</label>
           <select
             value={options.userMode}
@@ -270,7 +380,7 @@ function GenerateForm({
           />
         </div>
         <div className="field">
-          <label>Caracteres</label>
+          <label>{'Caracteres del c\u00f3digo'}</label>
           <select
             value={options.charset}
             onChange={(e) =>
@@ -284,16 +394,35 @@ function GenerateForm({
           </select>
         </div>
         {options.userMode === 'separate' && (
-          <div className="field">
-            <label>Largo de la clave</label>
-            <input
-              type="number"
-              min={3}
-              max={12}
-              value={options.passwordLength}
-              onChange={(e) => setOptions({ ...options, passwordLength: Number(e.target.value) })}
-            />
-          </div>
+          <>
+            <div className="field">
+              <label>{'Largo de la contrase\u00f1a'}</label>
+              <input
+                type="number"
+                min={3}
+                max={12}
+                value={options.passwordLength}
+                onChange={(e) => setOptions({ ...options, passwordLength: Number(e.target.value) })}
+              />
+            </div>
+            <div className="field">
+              <label>{'Caracteres de la contrase\u00f1a'}</label>
+              <select
+                value={options.passwordCharset}
+                onChange={(e) =>
+                  setOptions({
+                    ...options,
+                    passwordCharset: e.target.value as CodeOptions['passwordCharset']
+                  })
+                }
+              >
+                <option value="num">{'Solo n\u00fameros'}</option>
+                <option value="lower">{'Letras min\u00fasculas'}</option>
+                <option value="upper">{'Letras MAY\u00daSCULAS'}</option>
+                <option value="alnum">{'Letras y n\u00fameros'}</option>
+              </select>
+            </div>
+          </>
         )}
         {progress && (
           <div className="field full">
@@ -426,7 +555,7 @@ function PrintModal({ batch, onClose }: { batch: Batch; onClose: () => void }): 
       const [t, p, savedTpl, savedPrinter] = await Promise.all([
         api.templates.list(),
         api.print.listPrinters(),
-        api.settings.get('lastTemplateId'),
+        api.settings.get(`lastTemplateId:${batch.routerId}`),
         api.settings.get('lastPrinter')
       ])
       setTemplates(t)
@@ -461,7 +590,7 @@ function PrintModal({ batch, onClose }: { batch: Batch; onClose: () => void }): 
   }, [batch.id, templateId, onlyActive])
 
   const saveChoices = (): void => {
-    if (templateId !== null) void api.settings.set('lastTemplateId', String(templateId))
+    if (templateId !== null) void api.settings.set(`lastTemplateId:${batch.routerId}`, String(templateId))
     if (printerName) void api.settings.set('lastPrinter', printerName)
   }
 
