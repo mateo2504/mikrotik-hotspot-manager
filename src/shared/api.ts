@@ -77,6 +77,7 @@ export interface Api {
     resume(batchId: number): Promise<ResumeBatchResult>
     remove(batchId: number): Promise<DeleteBatchResult>
     onGenerateProgress(cb: (p: GenerateProgress) => void): () => void
+    onResumeWaitingConnection(cb: () => void): () => void
   }
   templates: {
     list(): Promise<Template[]>

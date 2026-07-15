@@ -82,7 +82,8 @@ export async function generateBatch(
       await addUser(client, props)
       markVoucherCreated(batchId, c.username)
       created++
-    } catch {
+    } catch (err) {
+      if (client.isDisconnected?.()) throw err
       failed++
     }
     if ((i + 1) % 10 === 0 || i + 1 === codes.length) onProgress(i + 1, codes.length)
@@ -131,7 +132,10 @@ export async function resumeBatch(
       await addUser(client, props)
       markVoucherCreated(batchId, voucher.username)
       created++
-    } catch {
+    } catch (err) {
+      // El manejador IPC esperará una sesión nueva y volverá a consultar el
+      // lote completo. Así también detecta una ficha creada justo antes del corte.
+      if (client.isDisconnected?.()) throw err
       failed++
     }
     if ((i + 1) % 10 === 0 || i + 1 === pending.length) onProgress(i + 1, pending.length)

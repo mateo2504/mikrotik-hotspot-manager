@@ -17,7 +17,7 @@ import * as planMetaRepo from '../db/repos/planMeta'
 import * as batchesRepo from '../db/repos/batches'
 import * as templatesRepo from '../db/repos/templates'
 import * as settingsRepo from '../db/repos/settings'
-import { connectRouter, type ConnectedRouter } from '../routeros/client'
+import { connectRouter, type ConnectedRouter, type RouterClient } from '../routeros/client'
 import {
   PROFILE_PATH,
   USER_PATH,
@@ -48,6 +48,42 @@ interface Session extends ConnectedRouter {
 }
 
 let session: Session | null = null
+const sessionChangeListeners = new Set<() => void>()
+
+function setSession(next: Session | null): void {
+  session = next
+  for (const listener of sessionChangeListeners) listener()
+}
+
+function waitForReplacementClient(
+  routerId: number,
+  previousClient: RouterClient,
+  timeoutMs = 60_000
+): Promise<RouterClient> {
+  if (session?.routerId === routerId && session.client !== previousClient) {
+    return Promise.resolve(session.client)
+  }
+
+  return new Promise((resolve, reject) => {
+    const cleanup = (): void => {
+      clearTimeout(timer)
+      sessionChangeListeners.delete(check)
+    }
+    const check = (): void => {
+      if (session?.routerId === routerId && session.client !== previousClient) {
+        const nextClient = session.client
+        cleanup()
+        resolve(nextClient)
+      }
+    }
+    const timer = setTimeout(() => {
+      sessionChangeListeners.delete(check)
+      reject(new Error('No se pudo recuperar la conexión para continuar el lote'))
+    }, timeoutMs)
+    sessionChangeListeners.add(check)
+    check()
+  })
+}
 
 function client(): ConnectedRouter['client'] {
   if (!session) throw new Error('No hay conexión activa con el router')
@@ -176,7 +212,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
     try {
       if (session) {
         await session.client.close()
-        session = null
+        setSession(null)
       }
       const record = routersRepo.getRouter(id)
       if (!record) throw new Error('Router no encontrado')
@@ -192,11 +228,11 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
         record.apiType,
         record.detectedApi
       )
-      session = { ...connected, routerId: id }
+      setSession({ ...connected, routerId: id })
       connected.client.onDisconnect?.((error) => {
         // No tocar una sesión nueva si el aviso pertenece a una conexión anterior.
         if (!session || session.client !== connected.client) return
-        session = null
+        setSession(null)
         const win = getMainWindow()
         if (win && !win.isDestroyed()) {
           win.webContents.send('router:connection-lost', { error: errMsg(error) })
@@ -213,7 +249,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   ipcMain.handle('router:disconnect', async () => {
     if (session) {
       await session.client.close()
-      session = null
+      setSession(null)
     }
     return { ok: true }
   })
@@ -411,9 +447,20 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
       if (!session || session.routerId !== batch.routerId) {
         throw new Error('Conéctate al router de este lote para reanudarlo')
       }
-      return await resumeBatch(session.client, batchId, (done, total) => {
-        if (!e.sender.isDestroyed()) e.sender.send('batches:generate-progress', { done, total })
-      })
+      let activeClient = session.client
+      while (true) {
+        try {
+          return await resumeBatch(activeClient, batchId, (done, total) => {
+            if (!e.sender.isDestroyed()) e.sender.send('batches:generate-progress', { done, total })
+          })
+        } catch (err) {
+          if (!activeClient.isDisconnected?.()) throw err
+          if (!e.sender.isDestroyed()) {
+            e.sender.send('batches:resume-waiting-connection')
+          }
+          activeClient = await waitForReplacementClient(batch.routerId, activeClient)
+        }
+      }
     } catch (err) {
       return { ok: false, error: errMsg(err) }
     }

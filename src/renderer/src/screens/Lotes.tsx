@@ -171,7 +171,9 @@ function ResumeBatchModal({
   const [checking, setChecking] = useState(true)
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+  const [waitingForConnection, setWaitingForConnection] = useState(false)
   const unsubRef = useRef<(() => void) | null>(null)
+  const waitingUnsubRef = useRef<(() => void) | null>(null)
 
   const check = async (): Promise<void> => {
     setChecking(true)
@@ -183,16 +185,27 @@ function ResumeBatchModal({
 
   useEffect(() => {
     void check()
-    return () => unsubRef.current?.()
+    return () => {
+      unsubRef.current?.()
+      waitingUnsubRef.current?.()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batch.id])
 
   const resume = async (): Promise<void> => {
     setBusy(true)
+    setWaitingForConnection(false)
     setProgress({ done: 0, total: Math.max(1, batch.voucherCount - (present?.length ?? 0)) })
-    unsubRef.current = api.batches.onGenerateProgress((value) => setProgress(value))
+    unsubRef.current = api.batches.onGenerateProgress((value) => {
+      setWaitingForConnection(false)
+      setProgress(value)
+    })
+    waitingUnsubRef.current = api.batches.onResumeWaitingConnection(() => {
+      setWaitingForConnection(true)
+    })
     const result = await api.batches.resume(batch.id)
     unsubRef.current?.()
+    waitingUnsubRef.current?.()
     setBusy(false)
     if (!result.ok) {
       setProgress(null)
@@ -238,7 +251,9 @@ function ResumeBatchModal({
       {progress && (
         <div className="field full" style={{ marginTop: 16 }}>
           <label>
-            Creando fichas faltantes… {progress.done} / {progress.total}
+            {waitingForConnection
+              ? 'Esperando que se restablezca la conexión…'
+              : `Creando fichas faltantes… ${progress.done} / ${progress.total}`}
           </label>
           <div className="progress-bar">
             <div style={{ width: `${(progress.done / progress.total) * 100}%` }} />

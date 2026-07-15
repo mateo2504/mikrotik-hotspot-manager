@@ -109,6 +109,11 @@ const api: Api = {
       const listener = (_e: Electron.IpcRendererEvent, p: GenerateProgress): void => cb(p)
       ipcRenderer.on('batches:generate-progress', listener)
       return () => ipcRenderer.removeListener('batches:generate-progress', listener)
+    },
+    onResumeWaitingConnection: (cb: () => void): (() => void) => {
+      const listener = (): void => cb()
+      ipcRenderer.on('batches:resume-waiting-connection', listener)
+      return () => ipcRenderer.removeListener('batches:resume-waiting-connection', listener)
     }
   },
   templates: {
