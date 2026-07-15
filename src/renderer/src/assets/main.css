@@ -95,6 +95,24 @@ textarea {
   box-shadow: 0 0 6px var(--green);
 }
 
+.conn-dot.reconnecting {
+  background: var(--amber);
+  box-shadow: 0 0 6px var(--amber);
+}
+
+.reconnect-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+  color: var(--amber);
+}
+
+.reconnect-status .spinner {
+  width: 12px;
+  height: 12px;
+}
+
 .content {
   flex: 1;
   overflow-y: auto;

@@ -6,6 +6,8 @@ import type { ConnectionParams, RosObject, RouterClient } from './client'
 export class BinaryClient implements RouterClient {
   readonly kind = 'binary' as const
   private conn: RouterOSAPI
+  private disconnectError: Error | null = null
+  private disconnectListeners = new Set<(error: Error) => void>()
 
   constructor(params: ConnectionParams) {
     this.conn = new RouterOSAPI({
@@ -17,10 +19,19 @@ export class BinaryClient implements RouterClient {
       keepalive: true,
       ...(params.useSsl ? { tls: { rejectUnauthorized: false } } : {})
     })
+
+    // node-routeros reemite aquí los cortes/timeout del socket. Sin este
+    // receptor EventEmitter lo convierte en una excepción no controlada y
+    // Electron muestra un error del proceso principal.
+    this.conn.on('error', (err: unknown) => {
+      this.disconnectError = new Error(translateError(err))
+      for (const listener of this.disconnectListeners) listener(this.disconnectError)
+    })
   }
 
   async connect(): Promise<void> {
     try {
+      this.disconnectError = null
       await this.conn.connect()
     } catch (err) {
       throw new Error(translateError(err))
@@ -35,8 +46,14 @@ export class BinaryClient implements RouterClient {
     }
   }
 
+  onDisconnect(listener: (error: Error) => void): () => void {
+    this.disconnectListeners.add(listener)
+    return () => this.disconnectListeners.delete(listener)
+  }
+
   private async write(menu: string, words: string[]): Promise<RosObject[]> {
     try {
+      if (this.disconnectError) throw this.disconnectError
       const res = await this.conn.write(menu, words)
       return (res ?? []) as RosObject[]
     } catch (err) {

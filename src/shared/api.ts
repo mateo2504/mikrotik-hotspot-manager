@@ -38,6 +38,7 @@ export interface Api {
     remove(id: number): Promise<void>
     connect(id: number): Promise<ConnectResult>
     disconnect(): Promise<SimpleResult>
+    onConnectionLost(cb: (info: { error: string }) => void): () => void
   }
   profiles: {
     list(): Promise<HotspotProfile[]>

@@ -44,7 +44,12 @@ const api: Api = {
       ipcRenderer.invoke('routers:update', id, input),
     remove: (id: number): Promise<void> => ipcRenderer.invoke('routers:delete', id),
     connect: (id: number): Promise<ConnectResult> => ipcRenderer.invoke('router:connect', id),
-    disconnect: (): Promise<SimpleResult> => ipcRenderer.invoke('router:disconnect')
+    disconnect: (): Promise<SimpleResult> => ipcRenderer.invoke('router:disconnect'),
+    onConnectionLost: (cb: (info: { error: string }) => void): (() => void) => {
+      const listener = (_e: Electron.IpcRendererEvent, info: { error: string }): void => cb(info)
+      ipcRenderer.on('router:connection-lost', listener)
+      return () => ipcRenderer.removeListener('router:connection-lost', listener)
+    }
   },
   profiles: {
     list: (): Promise<HotspotProfile[]> => ipcRenderer.invoke('profiles:list'),

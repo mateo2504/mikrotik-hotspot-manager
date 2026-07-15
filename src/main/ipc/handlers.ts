@@ -193,6 +193,15 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
         record.detectedApi
       )
       session = { ...connected, routerId: id }
+      connected.client.onDisconnect?.((error) => {
+        // No tocar una sesión nueva si el aviso pertenece a una conexión anterior.
+        if (!session || session.client !== connected.client) return
+        session = null
+        const win = getMainWindow()
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('router:connection-lost', { error: errMsg(error) })
+        }
+      })
       seedDefaultTemplates(id)
       if (record.apiType === 'auto') routersRepo.setDetectedApi(id, connected.api)
       return { ok: true, identity: connected.identity, version: connected.version, api: connected.api }

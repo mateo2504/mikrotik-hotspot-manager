@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RouterRecord } from '../../shared/types'
-import { ToastProvider } from './components/ui'
+import { ToastProvider, useToast } from './components/ui'
 import { api } from './lib/api'
 import RouterList from './screens/RouterList'
 import Dashboard from './screens/Dashboard'
@@ -57,16 +57,77 @@ function Footer(): React.JSX.Element {
   )
 }
 
-function App(): React.JSX.Element {
+function AppContent(): React.JSX.Element {
   const [screen, setScreen] = useState<Screen>('routers')
   const [connection, setConnection] = useState<Connection | null>(null)
+  const [reconnectAttempt, setReconnectAttempt] = useState<number | null>(null)
+  const toast = useToast()
+  const activeConnection = useRef<Connection | null>(null)
+  const reconnectRun = useRef(0)
+
+  useEffect(() => {
+    activeConnection.current = connection
+  }, [connection])
+
+  useEffect(() => {
+    return api.routers.onConnectionLost(({ error }) => {
+      const lostConnection = activeConnection.current
+      if (!lostConnection) return
+
+      const run = ++reconnectRun.current
+      void (async () => {
+        let lastError = error
+        toast.info(`Conexión perdida. Reconectando a ${lostConnection.router.name}...`)
+
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+          setReconnectAttempt(attempt)
+          await new Promise<void>((resolve) => setTimeout(resolve, attempt === 1 ? 1000 : 3000))
+          if (run !== reconnectRun.current) return
+
+          try {
+            const result = await api.routers.connect(lostConnection.router.id)
+            if (run !== reconnectRun.current) return
+            if (result.ok) {
+              const restored = {
+                router: lostConnection.router,
+                identity: result.identity ?? '',
+                version: result.version ?? '',
+                api: result.api ?? 'binary'
+              }
+              activeConnection.current = restored
+              setConnection(restored)
+              setReconnectAttempt(null)
+              toast.success(`Conexión recuperada con ${lostConnection.router.name}`)
+              return
+            }
+            lastError = result.error ?? lastError
+          } catch (err) {
+            lastError = err instanceof Error ? err.message : String(err)
+          }
+        }
+
+        if (run !== reconnectRun.current) return
+        activeConnection.current = null
+        setConnection(null)
+        setReconnectAttempt(null)
+        setScreen('routers')
+        toast.error(`No se pudo recuperar la conexión: ${lastError}`)
+      })()
+    })
+  }, [toast])
 
   const handleConnected = (conn: Connection): void => {
+    reconnectRun.current += 1
+    activeConnection.current = conn
+    setReconnectAttempt(null)
     setConnection(conn)
     setScreen('dashboard')
   }
 
   const handleDisconnect = (): void => {
+    reconnectRun.current += 1
+    activeConnection.current = null
+    setReconnectAttempt(null)
     void api.routers.disconnect()
     setConnection(null)
     setScreen('routers')
@@ -75,8 +136,7 @@ function App(): React.JSX.Element {
   const backToDashboard = (): void => setScreen('dashboard')
 
   return (
-    <ToastProvider>
-      <div className="app">
+    <div className="app">
         <div className="topbar">
           <div className="brand">
             <div className="logo">📶</div>
@@ -84,13 +144,18 @@ function App(): React.JSX.Element {
           </div>
           {connection && (
             <div className="conn-info">
-              <span className="conn-dot" />
+              <span className={`conn-dot${reconnectAttempt ? ' reconnecting' : ''}`} />
               <span>
                 <b>{connection.router.name}</b> — {connection.identity} · RouterOS{' '}
                 {connection.version} ·{' '}
                 <span className="badge blue">
                   {connection.api === 'rest' ? 'REST' : 'API binaria'}
                 </span>
+                {reconnectAttempt && (
+                  <span className="reconnect-status">
+                    <span className="spinner" /> Reconectando ({reconnectAttempt}/3)
+                  </span>
+                )}
               </span>
             </div>
           )}
@@ -109,7 +174,14 @@ function App(): React.JSX.Element {
           {screen === 'plantillas' && <Plantillas onBack={backToDashboard} />}
         </div>
         <Footer />
-      </div>
+    </div>
+  )
+}
+
+function App(): React.JSX.Element {
+  return (
+    <ToastProvider>
+      <AppContent />
     </ToastProvider>
   )
 }
