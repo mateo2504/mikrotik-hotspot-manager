@@ -13,6 +13,11 @@ import type {
   HotspotUser,
   IpBinding,
   IpBindingInput,
+  PppoeActiveSession,
+  PppoeClient,
+  PppoeClientInput,
+  PppoePlan,
+  PppoePlanInput,
   PreviewResult,
   PrintBatchInput,
   PrintResult,
@@ -133,6 +138,32 @@ const api: Api = {
       ipcRenderer.invoke('print:pdf', batchId, templateId, onlyActive),
     previewHtml: (batchId: number, templateId: number, onlyActive: boolean): Promise<PreviewResult> =>
       ipcRenderer.invoke('print:previewHtml', batchId, templateId, onlyActive)
+  },
+  pppoePlans: {
+    list: (): Promise<PppoePlan[]> => ipcRenderer.invoke('pppoePlans:list'),
+    create: (input: PppoePlanInput): Promise<SimpleResult> =>
+      ipcRenderer.invoke('pppoePlans:create', input),
+    update: (oldName: string, input: PppoePlanInput): Promise<SimpleResult> =>
+      ipcRenderer.invoke('pppoePlans:update', oldName, input),
+    remove: (name: string): Promise<SimpleResult> => ipcRenderer.invoke('pppoePlans:delete', name)
+  },
+  pppoeClients: {
+    list: (): Promise<PppoeClient[]> => ipcRenderer.invoke('pppoeClients:list'),
+    create: (input: PppoeClientInput): Promise<SimpleResult> =>
+      ipcRenderer.invoke('pppoeClients:create', input),
+    update: (rosId: string, previousName: string, input: PppoeClientInput): Promise<SimpleResult> =>
+      ipcRenderer.invoke('pppoeClients:update', rosId, previousName, input),
+    remove: (rosId: string, name: string): Promise<SimpleResult> =>
+      ipcRenderer.invoke('pppoeClients:delete', rosId, name),
+    suspend: (rosId: string, name: string): Promise<SimpleResult> =>
+      ipcRenderer.invoke('pppoeClients:suspend', rosId, name),
+    resume: (rosId: string): Promise<SimpleResult> =>
+      ipcRenderer.invoke('pppoeClients:resume', rosId)
+  },
+  pppoeActive: {
+    list: (): Promise<PppoeActiveSession[]> => ipcRenderer.invoke('pppoeActive:list'),
+    disconnect: (rosId: string): Promise<SimpleResult> =>
+      ipcRenderer.invoke('pppoeActive:disconnect', rosId)
   },
   settings: {
     get: (key: string): Promise<string | null> => ipcRenderer.invoke('settings:get', key),

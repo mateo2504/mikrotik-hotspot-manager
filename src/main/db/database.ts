@@ -112,6 +112,19 @@ const MIGRATIONS: string[] = [
   UPDATE templates SET tag = 'plantilla:T-legacy-' || id WHERE tag = '';
   CREATE INDEX idx_templates_shared_key ON templates(shared_key);
   CREATE INDEX idx_templates_published ON templates(published);
+  `,
+  // v6: planes PPPoE por router (velocidad via simple queue, no perfil hotspot)
+  `
+  CREATE TABLE pppoe_plans (
+    router_id INTEGER NOT NULL REFERENCES routers(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    upload_mbps TEXT NOT NULL DEFAULT '',
+    download_mbps TEXT NOT NULL DEFAULT '',
+    price TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (router_id, name)
+  );
+  CREATE INDEX idx_pppoe_plans_router ON pppoe_plans(router_id);
   `
 ]
 

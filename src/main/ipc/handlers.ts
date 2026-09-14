@@ -5,6 +5,8 @@ import QRCode from 'qrcode'
 import type {
   CodeOptions,
   IpBindingInput,
+  PppoeClientInput,
+  PppoePlanInput,
   PrintBatchInput,
   ProfileInput,
   RouterInput,
@@ -14,6 +16,7 @@ import type {
 } from '../../shared/types'
 import * as routersRepo from '../db/repos/routers'
 import * as planMetaRepo from '../db/repos/planMeta'
+import * as pppoePlansRepo from '../db/repos/pppoePlans'
 import * as batchesRepo from '../db/repos/batches'
 import * as templatesRepo from '../db/repos/templates'
 import * as settingsRepo from '../db/repos/settings'
@@ -39,6 +42,17 @@ import {
   updateIpBinding,
   userProps
 } from '../routeros/hotspot'
+import {
+  createPppoeClient,
+  disconnectPppoeActive,
+  listPppoeActive,
+  listPppoeClients,
+  removePppoeClient,
+  resumePppoeClient,
+  suspendPppoeClient,
+  syncQueuesForPlan,
+  updatePppoeClient
+} from '../routeros/pppoe'
 import { generateBatch, resumeBatch } from '../services/batchGenerator'
 import { exportPdf, listPrinters, printHtml } from '../services/printer'
 import { defaultTemplates, renderVoucherHTML } from '../../shared/voucherRender'
@@ -569,6 +583,118 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
       return { html, printed, total, verified }
     }
   )
+
+  // ---- Planes PPPoE ----
+  ipcMain.handle('pppoePlans:list', () => pppoePlansRepo.listPppoePlans(sessionRouterId()))
+  ipcMain.handle('pppoePlans:create', async (_e, input: PppoePlanInput) => {
+    try {
+      const name = input.name.trim()
+      if (!name) throw new Error('El nombre del plan es obligatorio')
+      if (!input.uploadMbps.trim() || !input.downloadMbps.trim()) {
+        throw new Error('Los megas de subida y bajada son obligatorios')
+      }
+      pppoePlansRepo.upsertPppoePlan(sessionRouterId(), {
+        name,
+        uploadMbps: input.uploadMbps.trim(),
+        downloadMbps: input.downloadMbps.trim(),
+        price: input.price.trim(),
+        notes: ''
+      })
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: errMsg(err) }
+    }
+  })
+  ipcMain.handle('pppoePlans:update', async (_e, oldName: string, input: PppoePlanInput) => {
+    try {
+      const name = input.name.trim()
+      if (!name) throw new Error('El nombre del plan es obligatorio')
+      if (!input.uploadMbps.trim() || !input.downloadMbps.trim()) {
+        throw new Error('Los megas de subida y bajada son obligatorios')
+      }
+      const plan = {
+        name,
+        uploadMbps: input.uploadMbps.trim(),
+        downloadMbps: input.downloadMbps.trim(),
+        price: input.price.trim(),
+        notes: ''
+      }
+      if (oldName !== name) pppoePlansRepo.renamePppoePlan(sessionRouterId(), oldName, name)
+      pppoePlansRepo.upsertPppoePlan(sessionRouterId(), plan)
+      await syncQueuesForPlan(client(), oldName, plan)
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: errMsg(err) }
+    }
+  })
+  ipcMain.handle('pppoePlans:delete', async (_e, name: string) => {
+    try {
+      pppoePlansRepo.deletePppoePlan(sessionRouterId(), name)
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: errMsg(err) }
+    }
+  })
+
+  // ---- Clientes PPPoE ----
+  ipcMain.handle('pppoeClients:list', async () => {
+    const plans = pppoePlansRepo.listPppoePlans(sessionRouterId())
+    return listPppoeClients(client(), plans)
+  })
+  ipcMain.handle('pppoeClients:create', async (_e, input: PppoeClientInput) => {
+    try {
+      await createPppoeClient(client(), sessionRouterId(), input)
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: errMsg(err) }
+    }
+  })
+  ipcMain.handle(
+    'pppoeClients:update',
+    async (_e, rosId: string, previousName: string, input: PppoeClientInput) => {
+      try {
+        await updatePppoeClient(client(), sessionRouterId(), rosId, previousName, input)
+        return { ok: true }
+      } catch (err) {
+        return { ok: false, error: errMsg(err) }
+      }
+    }
+  )
+  ipcMain.handle('pppoeClients:delete', async (_e, rosId: string, name: string) => {
+    try {
+      await removePppoeClient(client(), rosId, name)
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: errMsg(err) }
+    }
+  })
+  ipcMain.handle('pppoeClients:suspend', async (_e, rosId: string, name: string) => {
+    try {
+      await suspendPppoeClient(client(), rosId, name)
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: errMsg(err) }
+    }
+  })
+  ipcMain.handle('pppoeClients:resume', async (_e, rosId: string) => {
+    try {
+      await resumePppoeClient(client(), rosId)
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: errMsg(err) }
+    }
+  })
+
+  // ---- Activos PPPoE ----
+  ipcMain.handle('pppoeActive:list', () => listPppoeActive(client()))
+  ipcMain.handle('pppoeActive:disconnect', async (_e, rosId: string) => {
+    try {
+      await disconnectPppoeActive(client(), rosId)
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: errMsg(err) }
+    }
+  })
 
   // ---- Ajustes ----
   ipcMain.handle('settings:get', (_e, key: string) => settingsRepo.getSetting(key))
