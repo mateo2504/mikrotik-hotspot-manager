@@ -190,7 +190,7 @@ async function renderBatchHtml(
 export function seedDefaultTemplates(routerId: number): void {
   if (templatesRepo.countTemplates(routerId) > 0) return
   for (const t of defaultTemplates()) {
-    templatesRepo.createTemplate(routerId, {
+    templatesRepo.createLocalTemplate(routerId, {
       name: t.name,
       kind: t.config.kind,
       config: t.config,
@@ -238,6 +238,7 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
           win.webContents.send('router:connection-lost', { error: errMsg(error) })
         }
       })
+      templatesRepo.syncPublishedTemplates(id)
       seedDefaultTemplates(id)
       if (record.apiType === 'auto') routersRepo.setDetectedApi(id, connected.api)
       return { ok: true, identity: connected.identity, version: connected.version, api: connected.api }

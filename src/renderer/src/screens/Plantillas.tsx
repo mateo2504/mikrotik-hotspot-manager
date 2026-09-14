@@ -88,6 +88,8 @@ export default function Plantillas({ onBack }: { onBack: () => void }): React.JS
                 </div>
               </div>
               <div className="rc-meta">
+                v{t.version} · {t.tag.replace(/^plantilla:/, '')}
+                {' · '}
                 {t.bgImagePath ? 'Con imagen de fondo' : 'Sin imagen de fondo'}
               </div>
               <div className="rc-actions">

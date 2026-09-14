@@ -1,5 +1,4 @@
 import Database from 'better-sqlite3'
-import { app } from 'electron'
 import { join } from 'path'
 
 let db: Database.Database | null = null
@@ -102,20 +101,21 @@ const MIGRATIONS: string[] = [
   ALTER TABLE templates_new RENAME TO templates;
   CREATE INDEX idx_templates_router ON templates(router_id);
   DELETE FROM settings WHERE key = 'lastTemplateId';
+  `,
+  // v5: versiones y tags de plantillas publicadas a todos los equipos
+  `
+  ALTER TABLE templates ADD COLUMN shared_key TEXT NOT NULL DEFAULT '';
+  ALTER TABLE templates ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE templates ADD COLUMN tag TEXT NOT NULL DEFAULT '';
+  ALTER TABLE templates ADD COLUMN published INTEGER NOT NULL DEFAULT 0;
+  UPDATE templates SET shared_key = 'local-' || id WHERE shared_key = '';
+  UPDATE templates SET tag = 'plantilla:T-legacy-' || id WHERE tag = '';
+  CREATE INDEX idx_templates_shared_key ON templates(shared_key);
+  CREATE INDEX idx_templates_published ON templates(published);
   `
 ]
 
-export function getDb(): Database.Database {
-  if (db) return db
-  const dbPath = join(app.getPath('userData'), 'hotspot.db')
-  db = new Database(dbPath)
-  db.pragma('journal_mode = WAL')
-  db.pragma('foreign_keys = ON')
-  migrate(db)
-  return db
-}
-
-function migrate(d: Database.Database): void {
+export function migrate(d: Database.Database): void {
   const current = d.pragma('user_version', { simple: true }) as number
   for (let v = current; v < MIGRATIONS.length; v++) {
     d.transaction(() => {
@@ -123,6 +123,31 @@ function migrate(d: Database.Database): void {
       d.pragma(`user_version = ${v + 1}`)
     })()
   }
+}
+
+export function setDb(next: Database.Database | null): void {
+  db = next
+}
+
+export function openMemoryDatabase(): Database.Database {
+  const d = new Database(':memory:')
+  d.pragma('foreign_keys = ON')
+  migrate(d)
+  setDb(d)
+  return d
+}
+
+export function getDb(): Database.Database {
+  if (db) return db
+  // Carga diferida para poder testear el repo sin arrancar Electron.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { app } = require('electron') as typeof import('electron')
+  const dbPath = join(app.getPath('userData'), 'hotspot.db')
+  db = new Database(dbPath)
+  db.pragma('journal_mode = WAL')
+  db.pragma('foreign_keys = ON')
+  migrate(db)
+  return db
 }
 
 export function closeDb(): void {
