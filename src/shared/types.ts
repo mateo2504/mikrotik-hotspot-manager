@@ -266,6 +266,10 @@ export interface Template {
   bgImagePath: string | null
   bgDataUrl: string | null // resuelto por main para preview/impresión
   createdAt: string
+  sharedKey: string
+  version: number
+  tag: string
+  published: boolean
 }
 
 export interface TemplateInput {

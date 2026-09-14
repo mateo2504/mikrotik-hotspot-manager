@@ -673,7 +673,7 @@ function PrintModal({ batch, onClose }: { batch: Batch; onClose: () => void }): 
           >
             {templates.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.name} ({t.kind === 'a4' ? 'Hoja' : 'Térmica'})
+                {t.name} ({t.kind === 'a4' ? 'Hoja' : 'Térmica'} · v{t.version})
               </option>
             ))}
           </select>

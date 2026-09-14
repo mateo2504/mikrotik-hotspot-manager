@@ -5,6 +5,9 @@ import { getPlanMeta } from '../db/repos/planMeta'
 import { createBatch, getBatch, getVouchers, insertVouchers, markVoucherCreated } from '../db/repos/batches'
 import { addUser, findUsersByComment } from '../routeros/hotspot'
 import type { ResumeBatchResult } from '../../shared/types'
+import { makeBatchTag } from './tags'
+
+export { makeBatchTag }
 
 const CHARSETS: Record<CodeOptions['charset'], string> = {
   num: '0123456789',
@@ -17,12 +20,6 @@ function randomCode(length: number, charset: string): string {
   let out = ''
   for (let i = 0; i < length; i++) out += charset[randomInt(charset.length)]
   return out
-}
-
-export function makeBatchTag(): string {
-  const d = new Date()
-  const date = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
-  return `B-${date}-${randomCode(4, CHARSETS.upper)}`
 }
 
 export function generateCodes(options: CodeOptions): { username: string; password: string }[] {
