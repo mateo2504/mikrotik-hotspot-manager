@@ -327,3 +327,61 @@ export interface SimpleResult {
   ok: boolean
   error?: string
 }
+
+// ---- PPPoE ----
+
+/** Perfil PPP que el backend pone en el secret. El usuario no lo elige. */
+export const PPPOE_DEFAULT_PROFILE = 'default'
+
+export interface PppoePlan {
+  name: string
+  uploadMbps: string
+  downloadMbps: string
+  price: string
+  notes: string
+}
+
+export interface PppoePlanInput {
+  name: string
+  uploadMbps: string
+  downloadMbps: string
+  price: string
+}
+
+export interface PppoeClient {
+  rosId: string
+  name: string
+  password: string
+  profile: string
+  localAddress: string
+  remoteAddress: string
+  comment: string
+  planName: string
+  uploadMbps: string
+  downloadMbps: string
+  disabled: boolean
+  service: string
+}
+
+export interface PppoeClientInput {
+  name: string
+  password: string
+  planName: string
+  comment: string
+}
+
+export interface PppoeActiveSession {
+  rosId: string
+  name: string
+  address: string
+  callerId: string
+  uptime: string
+  encoding: string
+  service: string
+}
+
+export interface PppoeSecretDefaults {
+  profile: string
+  localAddress: string
+  remoteAddress: string
+}
