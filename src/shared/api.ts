@@ -16,6 +16,7 @@ import type {
   PrintResult,
   PrinterInfo,
   ProfileInput,
+  ResumeBatchResult,
   RouterInput,
   RouterRecord,
   SimpleResult,
@@ -38,6 +39,7 @@ export interface Api {
     remove(id: number): Promise<void>
     connect(id: number): Promise<ConnectResult>
     disconnect(): Promise<SimpleResult>
+    onConnectionLost(cb: (info: { error: string }) => void): () => void
   }
   profiles: {
     list(): Promise<HotspotProfile[]>
@@ -72,8 +74,10 @@ export interface Api {
     getVouchers(batchId: number): Promise<Voucher[]>
     checkOnRouter(batchId: number): Promise<{ ok: boolean; present?: string[]; error?: string }>
     generate(input: { profileName: string; codeOptions: CodeOptions }): Promise<GenerateBatchResult>
+    resume(batchId: number): Promise<ResumeBatchResult>
     remove(batchId: number): Promise<DeleteBatchResult>
     onGenerateProgress(cb: (p: GenerateProgress) => void): () => void
+    onResumeWaitingConnection(cb: () => void): () => void
   }
   templates: {
     list(): Promise<Template[]>

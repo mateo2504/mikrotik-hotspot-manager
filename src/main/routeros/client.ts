@@ -11,6 +11,10 @@ export interface RouterClient {
   readonly kind: 'rest' | 'binary'
   connect(): Promise<void>
   close(): Promise<void>
+  /** Se ejecuta si una conexión persistente se pierde inesperadamente. */
+  onDisconnect?(listener: (error: Error) => void): () => void
+  /** Indica que una conexión persistente ya no puede aceptar comandos. */
+  isDisconnected?(): boolean
   /** path estilo 'ip/hotspot/user'. query: coincidencia exacta campo=valor */
   print(path: string, query?: Record<string, string>): Promise<RosObject[]>
   add(path: string, props: Record<string, string>): Promise<void>

@@ -6,6 +6,9 @@ import type { ConnectionParams, RosObject, RouterClient } from './client'
 export class BinaryClient implements RouterClient {
   readonly kind = 'binary' as const
   private conn: RouterOSAPI
+  private disconnectError: Error | null = null
+  private disconnectListeners = new Set<(error: Error) => void>()
+  private disconnectWaiters = new Set<(error: Error) => void>()
 
   constructor(params: ConnectionParams) {
     this.conn = new RouterOSAPI({
@@ -17,10 +20,21 @@ export class BinaryClient implements RouterClient {
       keepalive: true,
       ...(params.useSsl ? { tls: { rejectUnauthorized: false } } : {})
     })
+
+    // node-routeros reemite aquí los cortes/timeout del socket. Sin este
+    // receptor EventEmitter lo convierte en una excepción no controlada y
+    // Electron muestra un error del proceso principal.
+    this.conn.on('error', (err: unknown) => {
+      this.disconnectError = new Error(translateError(err))
+      for (const reject of this.disconnectWaiters) reject(this.disconnectError)
+      this.disconnectWaiters.clear()
+      for (const listener of this.disconnectListeners) listener(this.disconnectError)
+    })
   }
 
   async connect(): Promise<void> {
     try {
+      this.disconnectError = null
       await this.conn.connect()
     } catch (err) {
       throw new Error(translateError(err))
@@ -35,12 +49,32 @@ export class BinaryClient implements RouterClient {
     }
   }
 
+  onDisconnect(listener: (error: Error) => void): () => void {
+    this.disconnectListeners.add(listener)
+    return () => this.disconnectListeners.delete(listener)
+  }
+
+  isDisconnected(): boolean {
+    return this.disconnectError !== null
+  }
+
   private async write(menu: string, words: string[]): Promise<RosObject[]> {
+    let rejectOnDisconnect: ((error: Error) => void) | null = null
     try {
-      const res = await this.conn.write(menu, words)
+      if (this.disconnectError) throw this.disconnectError
+      const disconnected = new Promise<never>((_resolve, reject) => {
+        rejectOnDisconnect = reject
+        this.disconnectWaiters.add(reject)
+      })
+      // node-routeros puede dejar pendiente el Promise de un comando cuando el
+      // socket muere. La carrera hace que el comando termine inmediatamente al
+      // recibirse el evento de desconexión.
+      const res = await Promise.race([this.conn.write(menu, words), disconnected])
       return (res ?? []) as RosObject[]
     } catch (err) {
       throw new Error(translateError(err))
+    } finally {
+      if (rejectOnDisconnect) this.disconnectWaiters.delete(rejectOnDisconnect)
     }
   }
 

@@ -154,13 +154,16 @@ export function buildInterval(v: number, u: 'm' | 'h' | 'd'): string {
 
 // ---- Lotes ----
 
+export type CodeCharset = 'num' | 'lower' | 'upper' | 'alnum'
+
 export interface CodeOptions {
   qty: number
   prefix: string
   length: number // longitud del código (sin prefijo)
-  charset: 'num' | 'lower' | 'upper' | 'alnum'
+  charset: CodeCharset
   userMode: 'same' | 'separate' | 'userOnly' // same: usuario == clave, separate: distintos, userOnly: solo usuario sin clave
   passwordLength: number // solo separate
+  passwordCharset: CodeCharset // solo separate
 }
 
 export interface Batch {
@@ -193,6 +196,15 @@ export interface GenerateBatchResult {
   batchId?: number
   created?: number
   failed?: number
+  error?: string
+}
+
+export interface ResumeBatchResult {
+  ok: boolean
+  alreadyPresent?: number
+  created?: number
+  failed?: number
+  total?: number
   error?: string
 }
 
@@ -254,6 +266,10 @@ export interface Template {
   bgImagePath: string | null
   bgDataUrl: string | null // resuelto por main para preview/impresión
   createdAt: string
+  sharedKey: string
+  version: number
+  tag: string
+  published: boolean
 }
 
 export interface TemplateInput {
