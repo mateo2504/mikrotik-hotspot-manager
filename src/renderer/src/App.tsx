@@ -11,6 +11,9 @@ import Hosts from './screens/Hosts'
 import IpBindings from './screens/IpBindings'
 import Lotes from './screens/Lotes'
 import Plantillas from './screens/Plantillas'
+import PlanesPppoe from './screens/PlanesPppoe'
+import ClientesPppoe from './screens/ClientesPppoe'
+import ActivosPppoe from './screens/ActivosPppoe'
 
 export type Screen =
   | 'routers'
@@ -22,6 +25,9 @@ export type Screen =
   | 'ipBindings'
   | 'lotes'
   | 'plantillas'
+  | 'pppoePlanes'
+  | 'pppoeClientes'
+  | 'pppoeActivos'
 
 export interface Connection {
   router: RouterRecord
@@ -172,6 +178,9 @@ function AppContent(): React.JSX.Element {
           {screen === 'ipBindings' && <IpBindings onBack={backToDashboard} />}
           {screen === 'lotes' && <Lotes onBack={backToDashboard} />}
           {screen === 'plantillas' && <Plantillas onBack={backToDashboard} />}
+          {screen === 'pppoePlanes' && <PlanesPppoe onBack={backToDashboard} />}
+          {screen === 'pppoeClientes' && <ClientesPppoe onBack={backToDashboard} />}
+          {screen === 'pppoeActivos' && <ActivosPppoe onBack={backToDashboard} />}
         </div>
         <Footer />
     </div>

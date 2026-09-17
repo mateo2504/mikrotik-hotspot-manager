@@ -11,6 +11,11 @@ import type {
   HotspotUser,
   IpBinding,
   IpBindingInput,
+  PppoeActiveSession,
+  PppoeClient,
+  PppoeClientInput,
+  PppoePlan,
+  PppoePlanInput,
   PreviewResult,
   PrintBatchInput,
   PrintResult,
@@ -91,6 +96,24 @@ export interface Api {
     batch(input: PrintBatchInput): Promise<PrintResult>
     pdf(batchId: number, templateId: number, onlyActive: boolean): Promise<PrintResult>
     previewHtml(batchId: number, templateId: number, onlyActive: boolean): Promise<PreviewResult>
+  }
+  pppoePlans: {
+    list(): Promise<PppoePlan[]>
+    create(input: PppoePlanInput): Promise<SimpleResult>
+    update(oldName: string, input: PppoePlanInput): Promise<SimpleResult>
+    remove(name: string): Promise<SimpleResult>
+  }
+  pppoeClients: {
+    list(): Promise<PppoeClient[]>
+    create(input: PppoeClientInput): Promise<SimpleResult>
+    update(rosId: string, previousName: string, input: PppoeClientInput): Promise<SimpleResult>
+    remove(rosId: string, name: string): Promise<SimpleResult>
+    suspend(rosId: string, name: string): Promise<SimpleResult>
+    resume(rosId: string): Promise<SimpleResult>
+  }
+  pppoeActive: {
+    list(): Promise<PppoeActiveSession[]>
+    disconnect(rosId: string): Promise<SimpleResult>
   }
   settings: {
     get(key: string): Promise<string | null>

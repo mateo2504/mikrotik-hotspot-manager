@@ -6,7 +6,9 @@ const args = [
   '--experimental-strip-types',
   '--import',
   './scripts/ts-test-register.mjs',
-  'src/main/db/repos/templates.publish.test.ts'
+  'src/main/db/repos/templates.publish.test.ts',
+  'src/main/db/repos/pppoePlans.test.ts',
+  'src/main/routeros/pppoe.test.ts'
 ]
 
 const child = spawn(String(electron), args, {

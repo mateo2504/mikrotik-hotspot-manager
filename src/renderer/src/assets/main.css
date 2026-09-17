@@ -348,6 +348,20 @@ textarea {
   line-height: 1.4;
 }
 
+.menu-section {
+  max-width: 1000px;
+  margin: 18px auto 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+tr.disabled-row {
+  opacity: 0.65;
+}
+
 /* ---------- Tablas ---------- */
 .panel {
   background: var(--panel);
