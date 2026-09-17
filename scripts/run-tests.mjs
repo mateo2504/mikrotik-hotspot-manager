@@ -8,7 +8,11 @@ const args = [
   './scripts/ts-test-register.mjs',
   'src/main/db/repos/templates.publish.test.ts',
   'src/main/db/repos/pppoePlans.test.ts',
-  'src/main/routeros/pppoe.test.ts'
+  'src/main/routeros/pppoe.test.ts',
+  'src/main/showMainWindow.test.ts',
+  'src/main/prepare-native-modules.test.ts',
+  'src/main/db/database.migrate.test.ts',
+  'src/shared/mbps.test.ts'
 ]
 
 const child = spawn(String(electron), args, {

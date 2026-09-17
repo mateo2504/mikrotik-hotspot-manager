@@ -1,5 +1,6 @@
 import { getDb } from '../database'
 import type { PppoePlan } from '../../../shared/types'
+import { normalizeMbps } from '../../../shared/mbps'
 
 interface PlanRow {
   router_id: number
@@ -13,8 +14,8 @@ interface PlanRow {
 function toPlan(row: PlanRow): PppoePlan {
   return {
     name: row.name,
-    uploadMbps: row.upload_mbps,
-    downloadMbps: row.download_mbps,
+    uploadMbps: normalizeMbps(row.upload_mbps),
+    downloadMbps: normalizeMbps(row.download_mbps),
     price: row.price,
     notes: row.notes
   }
@@ -45,7 +46,14 @@ export function upsertPppoePlan(routerId: number, plan: PppoePlan): void {
          price = excluded.price,
          notes = excluded.notes`
     )
-    .run(routerId, plan.name, plan.uploadMbps, plan.downloadMbps, plan.price, plan.notes)
+    .run(
+      routerId,
+      plan.name,
+      normalizeMbps(plan.uploadMbps),
+      normalizeMbps(plan.downloadMbps),
+      plan.price,
+      plan.notes
+    )
 }
 
 export function renamePppoePlan(routerId: number, oldName: string, newName: string): void {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { PppoePlan, PppoePlanInput } from '../../../shared/types'
+import { displayMbps } from '../../../shared/mbps'
 import { ConfirmDialog, EmptyState, Modal, SectionHead, useToast } from '../components/ui'
 import { api } from '../lib/api'
 
@@ -76,8 +77,8 @@ export default function PlanesPppoe({ onBack }: { onBack: () => void }): React.J
                   <td>
                     <b>{p.name}</b>
                   </td>
-                  <td className="mono">{p.uploadMbps ? `${p.uploadMbps}M` : '—'}</td>
-                  <td className="mono">{p.downloadMbps ? `${p.downloadMbps}M` : '—'}</td>
+                  <td className="mono">{displayMbps(p.uploadMbps)}</td>
+                  <td className="mono">{displayMbps(p.downloadMbps)}</td>
                   <td>{p.price || '—'}</td>
                   <td>
                     <div className="row-actions">

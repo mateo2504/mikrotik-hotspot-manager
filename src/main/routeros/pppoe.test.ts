@@ -14,6 +14,8 @@ import {
   parsePppoeComment,
   pppoeInterfaceTarget,
   pppoeSecretProps,
+  poolRangeFromGateway,
+  PPPOE_POOL_NAME,
   readPppoeSecretDefaults,
   removePppoeClient,
   resumePppoeClient,
@@ -95,22 +97,36 @@ describe('secret y simplequeue PPPoE', () => {
     assert.equal('profile' in props && props.profile === 'default', true)
   })
 
-  it('si el perfil default no trae addresses, no las inventa en el secret', () => {
+  it('el secret siempre lleva local-address y remote-address', () => {
     const props = pppoeSecretProps(
       { name: 'juan', password: 'x', planName: 'basico', comment: '' },
-      { profile: 'default', localAddress: '', remoteAddress: '' }
+      { profile: 'default', localAddress: '192.168.88.1', remoteAddress: 'pppoe-pool' }
     )
-    assert.equal(props.profile, 'default')
-    assert.equal(props['local-address'], undefined)
-    assert.equal(props['remote-address'], undefined)
+    assert.equal(props['local-address'], '192.168.88.1')
+    assert.equal(props['remote-address'], 'pppoe-pool')
   })
 
-  it('la velocidad del secret va a simplequeue como subida/bajada en M', () => {
+  it('rechaza un secret sin IPs', () => {
+    assert.throws(
+      () =>
+        pppoeSecretProps(
+          { name: 'juan', password: 'x', planName: 'basico', comment: '' },
+          { profile: 'default', localAddress: '', remoteAddress: '' }
+        ),
+      /local-address y remote-address/
+    )
+  })
+
+  it('la velocidad del secret va a simplequeue como 3M/8M, no 3000000M', () => {
+    assert.equal(simpleQueueMaxLimit('3', '8'), '3M/8M')
     assert.equal(simpleQueueMaxLimit('5', '10'), '5M/10M')
     assert.equal(simpleQueueMaxLimit('8M', '20'), '8M/20M')
-    const q = simpleQueueProps('juan', '5', '10', 'pppoe-pool')
+    assert.equal(simpleQueueMaxLimit('3000000', '8000000'), '3M/8M')
+    assert.equal(simpleQueueMaxLimit('3000000M', '8000000M'), '3M/8M')
+    const q = simpleQueueProps('juan', '3', '8', 'pppoe-pool')
     assert.equal(q.name, simpleQueueName('juan'))
-    assert.equal(q['max-limit'], '5M/10M')
+    assert.equal(q['max-limit'], '3M/8M')
+    assert.notEqual(q['max-limit'], '3000000M/8000000M')
     assert.equal(q.target, pppoeInterfaceTarget('juan'))
   })
 
@@ -260,5 +276,53 @@ describe('CRUD PPPoE sobre RouterOS simulado', () => {
     await removePppoeClient(client, renamed[0].rosId, 'juan2')
     assert.equal((await listPppoeClients(client, [])).length, 0)
     assert.equal((await client.print('queue/simple')).length, 0)
+  })
+
+  it('si el perfil default no tiene IPs, crea pool y las pone en el secret', async () => {
+    client = new FakeClient()
+    await client.add('ppp/profile', { name: 'default' })
+    await client.add('ip/address', { address: '192.168.88.1/24', interface: 'bridge' })
+
+    await createPppoeClient(client, routerId, {
+      name: 'luis',
+      password: 'x',
+      planName: '10/20',
+      comment: ''
+    })
+
+    const secrets = await client.print('ppp/secret')
+    assert.equal(secrets.length, 1)
+    assert.equal(secrets[0]['local-address'], '192.168.88.1')
+    assert.equal(secrets[0]['remote-address'], PPPOE_POOL_NAME)
+    assert.ok(secrets[0]['local-address'])
+    assert.ok(secrets[0]['remote-address'])
+
+    const pools = await client.print('ip/pool')
+    assert.equal(pools.length, 1)
+    assert.equal(pools[0].name, PPPOE_POOL_NAME)
+    assert.equal(pools[0].ranges, poolRangeFromGateway('192.168.88.1', 24))
+
+    const profile = (await client.print('ppp/profile', { name: 'default' }))[0]
+    assert.equal(profile['local-address'], '192.168.88.1')
+    assert.equal(profile['remote-address'], PPPOE_POOL_NAME)
+
+    const queues = await client.print('queue/simple')
+    assert.equal(queues[0]['max-limit'], '10M/20M')
+  })
+
+  it('lista megas aunque RouterOS v7 devuelva el max-limit en bits', async () => {
+    await createPppoeClient(client, routerId, {
+      name: 'bits',
+      password: 'x',
+      planName: '10/20',
+      comment: ''
+    })
+    const stored = client.tables.get('queue/simple')?.[0]
+    assert.ok(stored)
+    stored['max-limit'] = '3000000/8000000'
+    const listed = await listPppoeClients(client, [])
+    assert.equal(listed[0].uploadMbps, '3')
+    assert.equal(listed[0].downloadMbps, '8')
+    assert.notEqual(`${listed[0].uploadMbps}M/${listed[0].downloadMbps}M`, '3000000M/8000000M')
   })
 })
