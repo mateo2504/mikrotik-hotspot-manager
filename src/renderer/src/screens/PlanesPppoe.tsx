@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { PppoePlan, PppoePlanInput } from '../../../shared/types'
+import { displayMbps } from '../../../shared/mbps'
 import { ConfirmDialog, EmptyState, Modal, SectionHead, useToast } from '../components/ui'
 import { api } from '../lib/api'
 
@@ -55,8 +56,8 @@ export default function PlanesPppoe({ onBack }: { onBack: () => void }): React.J
 
       {loaded && plans.length === 0 ? (
         <EmptyState icon="📋" title="Sin planes PPPoE">
-          Crea un plan con megas de subida y bajada. La velocidad se aplica con simplequeue al crear
-          el cliente.
+          Crea un plan con megas de subida y bajada. Al guardar un cliente, el simplequeue usa
+          esos megas y apunta a la IP remota del cliente.
         </EmptyState>
       ) : (
         <div className="panel table-wrap">
@@ -76,8 +77,8 @@ export default function PlanesPppoe({ onBack }: { onBack: () => void }): React.J
                   <td>
                     <b>{p.name}</b>
                   </td>
-                  <td className="mono">{p.uploadMbps ? `${p.uploadMbps}M` : '—'}</td>
-                  <td className="mono">{p.downloadMbps ? `${p.downloadMbps}M` : '—'}</td>
+                  <td className="mono">{displayMbps(p.uploadMbps)}</td>
+                  <td className="mono">{displayMbps(p.downloadMbps)}</td>
                   <td>{p.price || '—'}</td>
                   <td>
                     <div className="row-actions">
@@ -201,7 +202,7 @@ function PlanForm({
             onChange={(e) => setForm({ ...form, uploadMbps: e.target.value })}
             placeholder="Ej. 5"
           />
-          <div className="hint">Se aplica en el simplequeue al crear el secret</div>
+          <div className="hint">Se aplica en el simplequeue (target = IP remota del cliente)</div>
         </div>
         <div className="field">
           <label>Megas de bajada</label>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { PppoeClient, PppoeClientInput, PppoePlan } from '../../../shared/types'
+import { displayMbps } from '../../../shared/mbps'
 import { ConfirmDialog, EmptyState, Modal, SectionHead, useToast } from '../components/ui'
 import { api } from '../lib/api'
 
@@ -36,7 +37,8 @@ export default function ClientesPppoe({ onBack }: { onBack: () => void }): React
       (c) =>
         c.name.toLowerCase().includes(q) ||
         c.planName.toLowerCase().includes(q) ||
-        c.comment.toLowerCase().includes(q)
+        c.comment.toLowerCase().includes(q) ||
+        c.remoteAddress.toLowerCase().includes(q)
     )
   }, [clients, search])
 
@@ -108,6 +110,7 @@ export default function ClientesPppoe({ onBack }: { onBack: () => void }): React
               <tr>
                 <th>Usuario</th>
                 <th>Contraseña</th>
+                <th>IP remota</th>
                 <th>Plan</th>
                 <th>Velocidad</th>
                 <th>Comentario</th>
@@ -121,10 +124,11 @@ export default function ClientesPppoe({ onBack }: { onBack: () => void }): React
                     <b>{c.name}</b> {c.disabled && <span className="badge red">suspendido</span>}
                   </td>
                   <td className="mono">{c.password || '—'}</td>
+                  <td className="mono">{c.remoteAddress || '—'}</td>
                   <td>{c.planName || '—'}</td>
                   <td className="mono">
                     {c.uploadMbps || c.downloadMbps
-                      ? `${c.uploadMbps || '—'}M ↑ ${c.downloadMbps || '—'}M ↓`
+                      ? `${displayMbps(c.uploadMbps)} ↑ ${displayMbps(c.downloadMbps)} ↓`
                       : '—'}
                   </td>
                   <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -219,9 +223,12 @@ function ClientForm({
           name: client.name,
           password: client.password,
           planName: client.planName || plans[0]?.name || '',
-          comment: client.comment
+          comment: client.comment,
+          remoteAddress: /^\d{1,3}(?:\.\d{1,3}){3}$/.test(client.remoteAddress.trim())
+            ? client.remoteAddress.trim()
+            : ''
         }
-      : { name: '', password: '', planName: plans[0]?.name ?? '', comment: '' }
+      : { name: '', password: '', planName: plans[0]?.name ?? '', comment: '', remoteAddress: '' }
   )
   const [busy, setBusy] = useState(false)
   const selected = plans.find((p) => p.name === form.planName)
@@ -290,14 +297,27 @@ function ClientForm({
             >
               {plans.map((p) => (
                 <option key={p.name} value={p.name}>
-                  {p.name} ({p.uploadMbps}M/{p.downloadMbps}M)
+                  {p.name} ({displayMbps(p.uploadMbps)}/{displayMbps(p.downloadMbps)})
                 </option>
               ))}
             </select>
             <div className="hint">
               {selected
-                ? `Simplequeue: ${selected.uploadMbps}M subida / ${selected.downloadMbps}M bajada. Profile, local-address y remote-address los pone el backend.`
+                ? `Simplequeue ${displayMbps(selected.uploadMbps)}/${displayMbps(selected.downloadMbps)} sobre la IP remota del cliente (/32).`
                 : 'La velocidad se aplica con simplequeue al guardar el secret.'}
+            </div>
+          </div>
+          <div className="field">
+            <label>IP remota (opcional)</label>
+            <input
+              className="mono"
+              placeholder="Vacío = asignar automáticamente"
+              value={form.remoteAddress ?? ''}
+              onChange={(e) => setForm({ ...form, remoteAddress: e.target.value })}
+            />
+            <div className="hint">
+              Cada cliente tiene una IPv4 fija y única. Si lo dejas vacío, se toma la siguiente libre
+              de la LAN del router (se saltan red, gateway y broadcast).
             </div>
           </div>
           <div className="field">

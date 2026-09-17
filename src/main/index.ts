@@ -1,10 +1,11 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, dialog, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { getDb, closeDb } from './db/database'
 import { registerIpcHandlers } from './ipc/handlers'
 import { initAutoUpdater } from './autoUpdater'
+import { attachMainWindowShow, type ShowableWindow } from './showMainWindow'
 
 // Depuración remota solo en desarrollo
 if (is.dev) {
@@ -28,9 +29,7 @@ function createWindow(): void {
     }
   })
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow?.show()
-  })
+  attachMainWindowShow(mainWindow as unknown as ShowableWindow)
 
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -55,10 +54,29 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  getDb()
-  registerIpcHandlers(() => mainWindow)
+  let startupError: string | null = null
+  try {
+    getDb()
+  } catch (err) {
+    startupError = err instanceof Error ? err.message : String(err)
+    console.error('Error al abrir la base de datos:', err)
+  }
+  try {
+    registerIpcHandlers(() => mainWindow)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    startupError = startupError ? `${startupError}\n${msg}` : msg
+    console.error('Error al registrar IPC:', err)
+  }
 
   createWindow()
+
+  if (startupError) {
+    dialog.showErrorBox(
+      'No se pudo iniciar',
+      `La ventana se abrió pero falló el arranque:\n\n${startupError}`
+    )
+  }
 
   // Inicializar verificación de actualizaciones (solo en producción)
   if (!is.dev) {
@@ -68,6 +86,13 @@ app.whenReady().then(() => {
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+process.on('uncaughtException', (err) => {
+  console.error('uncaughtException:', err)
+  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+    mainWindow.show()
+  }
 })
 
 app.on('window-all-closed', () => {

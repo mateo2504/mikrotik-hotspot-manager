@@ -100,9 +100,7 @@ export class RestClient implements RouterClient {
     } else {
       data = await this.call('GET', path)
     }
-    if (Array.isArray(data)) return data as RosObject[]
-    if (data && typeof data === 'object') return [data as RosObject]
-    return []
+    return toRosObjects(data)
   }
 
   async add(path: string, props: Record<string, string>): Promise<void> {
@@ -117,4 +115,17 @@ export class RestClient implements RouterClient {
     if (ids.length === 0) return
     await this.call('POST', `${path}/remove`, { numbers: ids.join(',') })
   }
+}
+
+function toRosObjects(data: unknown): RosObject[] {
+  const rows = Array.isArray(data) ? data : data && typeof data === 'object' ? [data] : []
+  return rows.map((row) => {
+    const out: RosObject = {}
+    if (!row || typeof row !== 'object') return out
+    for (const [k, v] of Object.entries(row as Record<string, unknown>)) {
+      if (v === undefined || v === null) continue
+      out[k] = String(v)
+    }
+    return out
+  })
 }
