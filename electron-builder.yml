@@ -27,3 +27,4 @@ publish:
   provider: github
   owner: mateo2504
   repo: mikrotik-hotspot-manager
+  releaseType: release
