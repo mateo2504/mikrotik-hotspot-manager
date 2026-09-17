@@ -3,7 +3,7 @@ import { join } from 'path'
 
 let db: Database.Database | null = null
 
-const MIGRATIONS: string[] = [
+export const MIGRATIONS: string[] = [
   // v1
   `
   CREATE TABLE routers (
