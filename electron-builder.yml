@@ -11,6 +11,8 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+  - node_modules/better-sqlite3/**
+afterPack: scripts/prepare-native-modules.cjs
 win:
   executableName: gestor-hotspot-mikrotik
 nsis:
