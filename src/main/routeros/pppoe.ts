@@ -14,14 +14,11 @@ export const PPP_SECRET_PATH = 'ppp/secret'
 export const PPP_ACTIVE_PATH = 'ppp/active'
 export const PPP_PROFILE_PATH = 'ppp/profile'
 export const QUEUE_SIMPLE_PATH = 'queue/simple'
-export const IP_POOL_PATH = 'ip/pool'
 export const IP_ADDRESS_PATH = 'ip/address'
 
 export { PPPOE_DEFAULT_PROFILE }
 
-export const PPPOE_POOL_NAME = 'pppoe-pool'
 export const PPPOE_FALLBACK_LOCAL = '10.10.10.1'
-export const PPPOE_FALLBACK_RANGE = '10.10.10.2-10.10.10.254'
 
 const PLAN_COMMENT_RE = /^plan:([^|]+?)(?:\s*\|\s*(.*))?$/s
 
@@ -41,11 +38,6 @@ export function simpleQueueName(username: string): string {
   return `pppoe-${username}`
 }
 
-/** Interfaz dinámica que RouterOS crea al conectar el secret. */
-export function pppoeInterfaceTarget(username: string): string {
-  return `<pppoe-${username}>`
-}
-
 /** max-limit de simple queue: subida/bajada en megas (`3M/8M`), nunca bits con M. */
 export function simpleQueueMaxLimit(uploadMbps: string, downloadMbps: string): string {
   return formatSimpleQueueMaxLimit(uploadMbps, downloadMbps)
@@ -59,9 +51,14 @@ function isIpv4(value: string): boolean {
   return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(value.trim())
 }
 
-function isUnsetAddress(value: string | undefined): boolean {
-  const v = (value ?? '').trim().toLowerCase()
-  return !v || v === 'none' || v === '0.0.0.0'
+/** IPv4 suelta o con /32. No acepta nombres de pool. */
+export function parseStaticIp(value: string): string | null {
+  const v = value.trim()
+  const m = v.match(/^(\d{1,3}(?:\.\d{1,3}){3})(?:\/(\d{1,2}))?$/)
+  if (!m) return null
+  if (!parseIpv4(m[1])) return null
+  if (m[2] && Number(m[2]) !== 32) return null
+  return m[1]
 }
 
 function parseIpv4(value: string): number[] | null {
@@ -83,6 +80,28 @@ function intToIp(n: number): string {
 }
 
 export function poolRangeFromGateway(gateway: string, prefix = 24): string | null {
+  const r = remoteIpBounds(gateway, prefix)
+  if (!r) return null
+  return `${intToIp(r.start)}-${intToIp(r.end)}`
+}
+
+export function pickNextRemoteIp(used: Iterable<string>, local: string, prefix = 24): string {
+  const bounds = remoteIpBounds(local, prefix) ?? remoteIpBounds(PPPOE_FALLBACK_LOCAL, 24)
+  if (!bounds) throw new Error('No se pudo calcular el rango de IPs remotas PPPoE')
+  const taken = new Set<string>()
+  for (const u of used) {
+    const ip = u.trim()
+    if (isIpv4(ip)) taken.add(ip)
+  }
+  taken.add(local.trim())
+  for (let n = bounds.start; n <= bounds.end; n++) {
+    const ip = intToIp(n)
+    if (!taken.has(ip)) return ip
+  }
+  throw new Error('No hay IPs remotas libres para clientes PPPoE')
+}
+
+function remoteIpBounds(gateway: string, prefix: number): { start: number; end: number } | null {
   const parts = parseIpv4(gateway)
   if (!parts || prefix < 8 || prefix > 30) return null
   const ip = ipToInt(parts)
@@ -92,7 +111,7 @@ export function poolRangeFromGateway(gateway: string, prefix = 24): string | nul
   const start = network + 2
   const end = broadcast - 1
   if (start > end) return null
-  return `${intToIp(start)}-${intToIp(end)}`
+  return { start, end }
 }
 
 function parseAddressCidr(address: string): { ip: string; prefix: number } | null {
@@ -118,95 +137,86 @@ function lanCandidates(rows: RosObject[]): { ip: string; prefix: number; iface: 
   return out
 }
 
-function localFromPoolRange(ranges: string): string | null {
-  const start = (ranges.split(',')[0] ?? '').split('-')[0]?.trim() ?? ''
-  const parts = parseIpv4(start)
-  if (!parts) return null
-  parts[3] = Math.max(1, parts[3] - 1)
-  return parts.join('.')
-}
-
-async function findPoolName(client: RouterClient, name: string): Promise<RosObject | null> {
-  const rows = await client.print(IP_POOL_PATH)
-  return rows.find((r) => (r.name ?? '') === name) ?? null
-}
-
-async function ensurePppoePool(
-  client: RouterClient,
-  localHint: string
-): Promise<{ poolName: string; localAddress: string }> {
-  const existing = await findPoolName(client, PPPOE_POOL_NAME)
-  if (existing) {
-    const local =
-      (!isUnsetAddress(localHint) && isIpv4(localHint)
-        ? localHint.trim()
-        : localFromPoolRange(existing.ranges ?? '')) || PPPOE_FALLBACK_LOCAL
-    return { poolName: PPPOE_POOL_NAME, localAddress: local }
-  }
-
-  const addrs = lanCandidates(await client.print(IP_ADDRESS_PATH))
-  const lan = addrs[0]
-  const local =
-    !isUnsetAddress(localHint) && isIpv4(localHint)
-      ? localHint.trim()
-      : (lan?.ip ?? PPPOE_FALLBACK_LOCAL)
-  const range =
-    poolRangeFromGateway(local, lan && lan.ip === local ? lan.prefix : 24) ?? PPPOE_FALLBACK_RANGE
-  await client.add(IP_POOL_PATH, { name: PPPOE_POOL_NAME, ranges: range })
-  return { poolName: PPPOE_POOL_NAME, localAddress: local }
-}
-
 /**
- * En v7 el secret no hereda bien local/remote si el perfil `default` los tiene vacíos
- * (`none`). Siempre se resuelve un local-address (IP del router) y un remote-address
- * (nombre de pool, para que cada cliente reciba una IP distinta).
+ * local-address estático del router. remote-address es IP por cliente, no pool.
  */
-export async function readPppoeSecretDefaults(client: RouterClient): Promise<PppoeSecretDefaults> {
+export async function resolvePppoeLocal(client: RouterClient): Promise<{
+  profile: string
+  localAddress: string
+  prefix: number
+}> {
   const rows = await client.print(PPP_PROFILE_PATH, { name: PPPOE_DEFAULT_PROFILE })
   const profile = rows[0]
+  const lans = lanCandidates(await client.print(IP_ADDRESS_PATH))
   let localAddress = (profile?.['local-address'] ?? '').trim()
-  let remoteAddress = (profile?.['remote-address'] ?? '').trim()
-  if (isUnsetAddress(localAddress)) localAddress = ''
-  if (isUnsetAddress(remoteAddress)) remoteAddress = ''
-
-  if (localAddress && remoteAddress) {
-    return { profile: PPPOE_DEFAULT_PROFILE, localAddress, remoteAddress }
+  if (!isIpv4(localAddress)) localAddress = ''
+  let prefix = 24
+  if (localAddress) {
+    const match = lans.find((l) => l.ip === localAddress)
+    if (match) prefix = match.prefix
+  } else if (lans[0]) {
+    localAddress = lans[0].ip
+    prefix = lans[0].prefix
+  } else {
+    localAddress = PPPOE_FALLBACK_LOCAL
+    prefix = 24
   }
 
-  if (remoteAddress && !isIpv4(remoteAddress)) {
-    const pool = await findPoolName(client, remoteAddress)
-    if (pool && !localAddress) {
-      localAddress = localFromPoolRange(pool.ranges ?? '') || PPPOE_FALLBACK_LOCAL
-    }
+  if (profile?.['.id'] && !isIpv4(profile['local-address'] ?? '')) {
+    await client.set(PPP_PROFILE_PATH, profile['.id'], { 'local-address': localAddress })
   }
 
-  if (!remoteAddress || !localAddress) {
-    const ensured = await ensurePppoePool(client, localAddress)
-    if (!remoteAddress) remoteAddress = ensured.poolName
-    if (!localAddress) localAddress = ensured.localAddress
-  }
+  return { profile: PPPOE_DEFAULT_PROFILE, localAddress, prefix }
+}
 
-  if (
-    profile?.['.id'] &&
-    (isUnsetAddress(profile['local-address']) || isUnsetAddress(profile['remote-address']))
-  ) {
-    await client.set(PPP_PROFILE_PATH, profile['.id'], {
-      'local-address': localAddress,
-      'remote-address': remoteAddress
-    })
-  }
+/** @deprecated usar resolvePppoeLocal; se mantiene para tests de local. */
+export async function readPppoeSecretDefaults(client: RouterClient): Promise<PppoeSecretDefaults> {
+  const resolved = await resolvePppoeLocal(client)
+  return { profile: resolved.profile, localAddress: resolved.localAddress, remoteAddress: '' }
+}
 
-  return { profile: PPPOE_DEFAULT_PROFILE, localAddress, remoteAddress }
+function usedRemoteIps(secrets: RosObject[], exceptRosId?: string): string[] {
+  const used: string[] = []
+  for (const row of secrets) {
+    if (exceptRosId && row['.id'] === exceptRosId) continue
+    const remote = parseStaticIp(row['remote-address'] ?? '')
+    if (remote) used.push(remote)
+  }
+  return used
+}
+
+export async function allocateRemoteAddress(
+  client: RouterClient,
+  localAddress: string,
+  prefix: number,
+  preferred: string | undefined,
+  exceptRosId?: string,
+  keepIfValid?: string
+): Promise<string> {
+  const secrets = await client.print(PPP_SECRET_PATH)
+  const used = usedRemoteIps(secrets, exceptRosId)
+  const wantedRaw = (preferred ?? '').trim()
+  if (wantedRaw) {
+    const wanted = parseStaticIp(wantedRaw)
+    if (!wanted) throw new Error(`IP remota inválida: ${wantedRaw}`)
+    if (wanted === localAddress) throw new Error('La IP remota no puede ser la local-address')
+    if (used.includes(wanted)) throw new Error(`La IP remota ${wanted} ya está en otro secret`)
+    return wanted
+  }
+  const current = parseStaticIp(keepIfValid ?? '')
+  if (current && current !== localAddress && !used.includes(current)) return current
+  return pickNextRemoteIp([...used, localAddress], localAddress, prefix)
 }
 
 export function pppoeSecretProps(
   input: PppoeClientInput,
-  defaults: PppoeSecretDefaults
+  defaults: PppoeSecretDefaults,
+  remoteAddress: string
 ): Record<string, string> {
   const localAddress = defaults.localAddress.trim()
-  const remoteAddress = defaults.remoteAddress.trim()
-  if (!localAddress || !remoteAddress) {
-    throw new Error('No se pudo asignar local-address y remote-address al secret PPPoE')
+  const remote = remoteAddress.trim()
+  if (!isIpv4(localAddress) || !isIpv4(remote)) {
+    throw new Error('No se pudo asignar local-address y remote-address estáticos al secret PPPoE')
   }
   return {
     name: input.name.trim(),
@@ -215,7 +225,7 @@ export function pppoeSecretProps(
     profile: defaults.profile || PPPOE_DEFAULT_PROFILE,
     comment: encodePppoeComment(input.planName, input.comment),
     'local-address': localAddress,
-    'remote-address': remoteAddress
+    'remote-address': remote
   }
 }
 
@@ -235,12 +245,13 @@ export function simpleQueueProps(
   downloadMbps: string,
   remoteAddress: string
 ): Record<string, string> {
-  const target = isIpv4(remoteAddress)
-    ? `${remoteAddress.trim()}/32`
-    : pppoeInterfaceTarget(username)
+  const ip = parseStaticIp(remoteAddress)
+  if (!ip) {
+    throw new Error(`simplequeue PPPoE requiere la IP remota del cliente, no "${remoteAddress}"`)
+  }
   return {
     name: simpleQueueName(username),
-    target,
+    target: `${ip}/32`,
     'max-limit': simpleQueueMaxLimit(uploadMbps, downloadMbps),
     comment: `pppoe:${username}`
   }
@@ -371,17 +382,22 @@ export async function createPppoeClient(
 ): Promise<void> {
   const plan = getPppoePlan(routerId, input.planName)
   if (!plan) throw new Error(`Plan PPPoE "${input.planName}" no encontrado`)
-  const defaults = await readPppoeSecretDefaults(client)
-  const props = pppoeSecretProps(input, defaults)
+  const resolved = await resolvePppoeLocal(client)
+  const remote = await allocateRemoteAddress(
+    client,
+    resolved.localAddress,
+    resolved.prefix,
+    input.remoteAddress
+  )
+  const defaults: PppoeSecretDefaults = {
+    profile: resolved.profile,
+    localAddress: resolved.localAddress,
+    remoteAddress: remote
+  }
+  const props = pppoeSecretProps(input, defaults, remote)
   await client.add(PPP_SECRET_PATH, props)
   try {
-    await upsertSimpleQueue(
-      client,
-      props.name,
-      plan.uploadMbps,
-      plan.downloadMbps,
-      props['remote-address'] ?? defaults.remoteAddress
-    )
+    await upsertSimpleQueue(client, props.name, plan.uploadMbps, plan.downloadMbps, remote)
   } catch (err) {
     const created = await findByName(client, PPP_SECRET_PATH, props.name)
     if (created?.['.id']) await client.remove(PPP_SECRET_PATH, [created['.id']])
@@ -398,15 +414,29 @@ export async function updatePppoeClient(
 ): Promise<void> {
   const plan = getPppoePlan(routerId, input.planName)
   if (!plan) throw new Error(`Plan PPPoE "${input.planName}" no encontrado`)
-  const defaults = await readPppoeSecretDefaults(client)
-  const props = pppoeSecretProps(input, defaults)
+  const resolved = await resolvePppoeLocal(client)
+  const current = (await client.print(PPP_SECRET_PATH)).find((r) => r['.id'] === rosId)
+  const remote = await allocateRemoteAddress(
+    client,
+    resolved.localAddress,
+    resolved.prefix,
+    input.remoteAddress,
+    rosId,
+    current?.['remote-address']
+  )
+  const defaults: PppoeSecretDefaults = {
+    profile: resolved.profile,
+    localAddress: resolved.localAddress,
+    remoteAddress: remote
+  }
+  const props = pppoeSecretProps(input, defaults, remote)
   await client.set(PPP_SECRET_PATH, rosId, props)
   await upsertSimpleQueue(
     client,
     props.name,
     plan.uploadMbps,
     plan.downloadMbps,
-    props['remote-address'] ?? defaults.remoteAddress,
+    remote,
     previousName
   )
 }
@@ -440,6 +470,7 @@ export async function syncQueuesForPlan(
   plan: PppoePlan
 ): Promise<void> {
   const secrets = await client.print(PPP_SECRET_PATH)
+  let resolved: { localAddress: string; prefix: number } | null = null
   for (const row of secrets) {
     if (!isPppoeService(row.service ?? '')) continue
     const parsed = parsePppoeComment(row.comment ?? '')
@@ -451,12 +482,18 @@ export async function syncQueuesForPlan(
         comment: encodePppoeComment(plan.name, parsed.comment)
       })
     }
-    await upsertSimpleQueue(
-      client,
-      username,
-      plan.uploadMbps,
-      plan.downloadMbps,
-      row['remote-address'] ?? ''
-    )
+    let remote = parseStaticIp(row['remote-address'] ?? '') ?? ''
+    if (!remote) {
+      if (!resolved) resolved = await resolvePppoeLocal(client)
+      remote = await allocateRemoteAddress(
+        client,
+        resolved.localAddress,
+        resolved.prefix,
+        undefined,
+        row['.id']
+      )
+      await client.set(PPP_SECRET_PATH, row['.id'] ?? '', { 'remote-address': remote })
+    }
+    await upsertSimpleQueue(client, username, plan.uploadMbps, plan.downloadMbps, remote)
   }
 }

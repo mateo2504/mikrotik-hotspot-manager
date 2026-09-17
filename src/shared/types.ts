@@ -368,6 +368,8 @@ export interface PppoeClientInput {
   password: string
   planName: string
   comment: string
+  /** Vacío = el backend elige una IPv4 remota libre y única. */
+  remoteAddress?: string
 }
 
 export interface PppoeActiveSession {
