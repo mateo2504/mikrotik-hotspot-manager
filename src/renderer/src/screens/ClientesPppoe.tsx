@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { PppoeClient, PppoeClientInput, PppoePlan } from '../../../shared/types'
+import { displayMbps } from '../../../shared/mbps'
 import { ConfirmDialog, EmptyState, Modal, SectionHead, useToast } from '../components/ui'
 import { api } from '../lib/api'
 
@@ -124,7 +125,7 @@ export default function ClientesPppoe({ onBack }: { onBack: () => void }): React
                   <td>{c.planName || '—'}</td>
                   <td className="mono">
                     {c.uploadMbps || c.downloadMbps
-                      ? `${c.uploadMbps || '—'}M ↑ ${c.downloadMbps || '—'}M ↓`
+                      ? `${displayMbps(c.uploadMbps)} ↑ ${displayMbps(c.downloadMbps)} ↓`
                       : '—'}
                   </td>
                   <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -290,13 +291,13 @@ function ClientForm({
             >
               {plans.map((p) => (
                 <option key={p.name} value={p.name}>
-                  {p.name} ({p.uploadMbps}M/{p.downloadMbps}M)
+                  {p.name} ({displayMbps(p.uploadMbps)}/{displayMbps(p.downloadMbps)})
                 </option>
               ))}
             </select>
             <div className="hint">
               {selected
-                ? `Simplequeue: ${selected.uploadMbps}M subida / ${selected.downloadMbps}M bajada. Profile, local-address y remote-address los pone el backend.`
+                ? `Simplequeue: ${displayMbps(selected.uploadMbps)} subida / ${displayMbps(selected.downloadMbps)} bajada. Profile, local-address y remote-address los pone el backend.`
                 : 'La velocidad se aplica con simplequeue al guardar el secret.'}
             </div>
           </div>

@@ -14,6 +14,7 @@ import type {
   UserInput,
   VoucherPrintData
 } from '../../shared/types'
+import { normalizeMbps } from '../../shared/mbps'
 import * as routersRepo from '../db/repos/routers'
 import * as planMetaRepo from '../db/repos/planMeta'
 import * as pppoePlansRepo from '../db/repos/pppoePlans'
@@ -153,7 +154,11 @@ async function buildPrintData(
   if (qrHost) {
     try {
       // URL del portal hotspot para escanear con el celular
-      qrDataUrl = await QRCode.toDataURL(`http://${qrHost}`, { width: 200, margin: 1, type: 'image/png' })
+      qrDataUrl = await QRCode.toDataURL(`http://${qrHost}`, {
+        width: 200,
+        margin: 1,
+        type: 'image/png'
+      })
     } catch {
       qrDataUrl = undefined
     }
@@ -188,9 +193,7 @@ async function renderBatchHtml(
   if (forPreview) {
     // Solo la primera página: la vista previa no necesita el lote completo
     const limit =
-      template.config.kind === 'a4'
-        ? Math.max(1, template.config.cols * template.config.rows)
-        : 3
+      template.config.kind === 'a4' ? Math.max(1, template.config.cols * template.config.rows) : 3
     slice = data.slice(0, limit)
   }
   return {
@@ -255,7 +258,12 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
       templatesRepo.syncPublishedTemplates(id)
       seedDefaultTemplates(id)
       if (record.apiType === 'auto') routersRepo.setDetectedApi(id, connected.api)
-      return { ok: true, identity: connected.identity, version: connected.version, api: connected.api }
+      return {
+        ok: true,
+        identity: connected.identity,
+        version: connected.version,
+        api: connected.api
+      }
     } catch (err) {
       return { ok: false, error: errMsg(err) }
     }
@@ -296,7 +304,8 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
         // rate-limit vacío debe limpiarse en el router (shared-users lo fija profileProps)
         if (!input.rateLimit) props['rate-limit'] = ''
         await client().set(PROFILE_PATH, rosId, props)
-        if (oldName !== input.name) planMetaRepo.renamePlanMeta(sessionRouterId(), oldName, input.name)
+        if (oldName !== input.name)
+          planMetaRepo.renamePlanMeta(sessionRouterId(), oldName, input.name)
         planMetaRepo.upsertPlanMeta(sessionRouterId(), {
           profileName: input.name,
           price: input.price,
@@ -561,7 +570,13 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
           onlyActive ?? true
         )
         if (printed === 0) {
-          return { ok: false, error: 'No hay fichas activas para exportar', printed, total, verified }
+          return {
+            ok: false,
+            error: 'No hay fichas activas para exportar',
+            printed,
+            total,
+            verified
+          }
         }
         const batch = batchesRepo.getBatch(batchId)
         // El comment_tag lleva "lote:" y los dos puntos no son válidos en nombres de archivo
@@ -599,8 +614,8 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
       }
       pppoePlansRepo.upsertPppoePlan(sessionRouterId(), {
         name,
-        uploadMbps: input.uploadMbps.trim(),
-        downloadMbps: input.downloadMbps.trim(),
+        uploadMbps: normalizeMbps(input.uploadMbps),
+        downloadMbps: normalizeMbps(input.downloadMbps),
         price: input.price.trim(),
         notes: ''
       })
@@ -618,8 +633,8 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
       }
       const plan = {
         name,
-        uploadMbps: input.uploadMbps.trim(),
-        downloadMbps: input.downloadMbps.trim(),
+        uploadMbps: normalizeMbps(input.uploadMbps),
+        downloadMbps: normalizeMbps(input.downloadMbps),
         price: input.price.trim(),
         notes: ''
       }
