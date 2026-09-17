@@ -6,6 +6,7 @@ import {
   createLocalTemplate,
   createTemplate,
   listTemplates,
+  resolveTemplateForPrint,
   syncPublishedTemplates,
   updateTemplate
 } from './templates'
@@ -123,5 +124,41 @@ describe('publicación de plantillas', () => {
 
     syncPublishedTemplates(b)
     assert.equal(listTemplates(b).length, 0)
+  })
+
+  it('al imprimir, una plantilla creada en un equipo sirve en cualquier otro', () => {
+    const a = insertRouter('Equipo A')
+    const b = insertRouter('Equipo B')
+    const created = createTemplate(a, input('Ficha custom', { thermalWidth: 80 }))
+
+    const printedOnB = resolveTemplateForPrint(created.id, b)
+    assert.ok(printedOnB)
+    assert.equal(printedOnB.sharedKey, created.sharedKey)
+    assert.equal(printedOnB.config.thermalWidth, 80)
+    assert.equal(printedOnB.published, true)
+    assert.notEqual(printedOnB.id, created.id)
+  })
+
+  it('al imprimir en un equipo nuevo, copia la plantilla publicada aunque el id sea de otro', () => {
+    const a = insertRouter('Equipo A')
+    const created = createTemplate(a, input('Ficha custom', { thermalWidth: 58 }))
+    updateTemplate(a, created.id, input('Ficha custom', { thermalWidth: 80 }))
+
+    const c = insertRouter('Equipo C')
+    assert.equal(listTemplates(c).length, 0)
+
+    const printedOnC = resolveTemplateForPrint(created.id, c)
+    assert.ok(printedOnC)
+    assert.equal(printedOnC.config.thermalWidth, 80)
+    assert.equal(printedOnC.sharedKey, created.sharedKey)
+    assert.equal(listTemplates(c).length, 1)
+  })
+
+  it('una plantilla local no publicada no se usa al imprimir en otro equipo', () => {
+    const a = insertRouter('Equipo A')
+    const b = insertRouter('Equipo B')
+    const local = createLocalTemplate(a, input('A4 — 2 x 5 fichas'))
+
+    assert.equal(resolveTemplateForPrint(local.id, b), null)
   })
 })

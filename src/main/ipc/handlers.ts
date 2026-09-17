@@ -180,7 +180,7 @@ async function renderBatchHtml(
 ): Promise<{ html: string; printed: number; total: number; verified: boolean }> {
   const batch = batchesRepo.getBatch(batchId)
   if (!batch) throw new Error('Lote no encontrado')
-  const template = templatesRepo.getTemplate(templateId, batch.routerId)
+  const template = templatesRepo.resolveTemplateForPrint(templateId, batch.routerId)
   if (!template) throw new Error('Plantilla no encontrada para este router')
   const { data, total, verified } = await buildPrintData(batchId, onlyActive)
   const printed = data.length
@@ -501,7 +501,11 @@ export function registerIpcHandlers(getMainWindow: () => BrowserWindow | null): 
   })
 
   // ---- Plantillas ----
-  ipcMain.handle('templates:list', () => templatesRepo.listTemplates(sessionRouterId()))
+  ipcMain.handle('templates:list', () => {
+    const routerId = sessionRouterId()
+    templatesRepo.syncPublishedTemplates(routerId)
+    return templatesRepo.listTemplates(routerId)
+  })
   ipcMain.handle('templates:create', (_e, input: TemplateInput) =>
     templatesRepo.createTemplate(sessionRouterId(), input)
   )

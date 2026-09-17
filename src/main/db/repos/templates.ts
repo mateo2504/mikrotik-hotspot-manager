@@ -171,6 +171,42 @@ export function getTemplate(id: number, routerId: number): Template | null {
   return row ? toTemplate(row) : null
 }
 
+function rowByNumericId(id: number): TemplateRow | undefined {
+  return getDb().prepare('SELECT * FROM templates WHERE id = ?').get(id) as TemplateRow | undefined
+}
+
+/**
+ * Plantilla a usar al imprimir un lote de un equipo.
+ * El id puede ser de otro router: si está publicada, se usa (o se copia) la
+ * versión compartida en el equipo del lote. Las de fábrica no publicadas
+ * siguen siendo locales.
+ */
+export function resolveTemplateForPrint(templateId: number, routerId: number): Template | null {
+  syncPublishedTemplates(routerId)
+  const onRouter = rowById(templateId, routerId)
+  if (onRouter) return toTemplate(onRouter)
+
+  const source = rowByNumericId(templateId)
+  if (!source) return null
+  if (!source.published) return null
+
+  const copy = rowBySharedKey(routerId, source.shared_key) ?? rowByName(routerId, source.name)
+  if (copy) return toTemplate(copy)
+
+  upsertPublishedOnRouter(
+    routerId,
+    {
+      name: source.name,
+      kind: source.kind,
+      config: JSON.parse(source.config_json) as TemplateConfig,
+      bgImagePath: source.bg_image_path
+    },
+    { sharedKey: source.shared_key, version: source.version, tag: source.tag }
+  )
+  const created = rowBySharedKey(routerId, source.shared_key)
+  return created ? toTemplate(created) : toTemplate(source)
+}
+
 /** Plantilla local de fábrica: no se publica a los demás equipos hasta crear/editar. */
 export function createLocalTemplate(routerId: number, input: TemplateInput): Template {
   const id = insertRow(routerId, input, {
